@@ -11,7 +11,7 @@ import {
 	Send,
 	X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	addComment,
 	applySuggestion,
@@ -66,6 +66,11 @@ export default function CommentThread({
 	originalRevisionNumber,
 }: CommentThreadProps) {
 	const router = useRouter();
+	const [expanded, setExpanded] = useState(!comment.resolved);
+	// Auto-collapse when resolved changes (e.g. user clicks Resolve)
+	useEffect(() => {
+		setExpanded(!comment.resolved);
+	}, [comment.resolved]);
 	const [replying, setReplying] = useState(false);
 	const [replyText, setReplyText] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -117,9 +122,36 @@ export default function CommentThread({
 	const isSuggestion =
 		comment.suggestionType && comment.suggestionContent != null;
 
+	// Collapsed view for resolved comments
+	if (!expanded) {
+		return (
+			<button
+				type="button"
+				onClick={() => setExpanded(true)}
+				className="island-shell flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left opacity-60 transition hover:opacity-80"
+			>
+				<ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-[var(--sea-ink-soft)]" />
+				<CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
+				<span className="truncate text-xs text-[var(--sea-ink-soft)]">
+					{comment.authorId.slice(0, 8)}:{" "}
+					<span className="text-[var(--sea-ink)]">
+						{comment.body.length > 60
+							? `${comment.body.slice(0, 60)}...`
+							: comment.body}
+					</span>
+				</span>
+				{replies.length > 0 && (
+					<span className="ml-auto flex-shrink-0 text-[10px] text-[var(--sea-ink-soft)]">
+						{replies.length} {replies.length === 1 ? "reply" : "replies"}
+					</span>
+				)}
+			</button>
+		);
+	}
+
 	return (
 		<div
-			className={`island-shell rounded-xl p-3 transition-opacity ${
+			className={`island-shell rounded-xl p-3 ${
 				comment.resolved
 					? "opacity-60"
 					: comment.outdated
@@ -129,9 +161,20 @@ export default function CommentThread({
 		>
 			{/* Main comment */}
 			<div className="mb-2 flex items-start gap-2">
-				<div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(79,184,178,0.15)]">
-					<MessageSquare className="h-3 w-3 text-[var(--lagoon-deep)]" />
-				</div>
+				{comment.resolved ? (
+					<button
+						type="button"
+						onClick={() => setExpanded(false)}
+						className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 transition hover:bg-emerald-200 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60"
+						aria-label="Collapse resolved comment"
+					>
+						<ChevronDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+					</button>
+				) : (
+					<div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(79,184,178,0.15)]">
+						<MessageSquare className="h-3 w-3 text-[var(--lagoon-deep)]" />
+					</div>
+				)}
 				<div className="min-w-0 flex-1">
 					<div className="mb-1 flex flex-wrap items-center gap-2">
 						<span className="text-xs font-semibold text-[var(--sea-ink)]">
@@ -140,6 +183,12 @@ export default function CommentThread({
 						<span className="text-xs text-[var(--sea-ink-soft)]">
 							{formatDate(comment.createdAt)}
 						</span>
+						{comment.resolved && (
+							<span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+								<CheckCircle2 className="h-2.5 w-2.5" />
+								Resolved
+							</span>
+						)}
 						{comment.outdated && (
 							<span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
 								<AlertTriangle className="h-2.5 w-2.5" />

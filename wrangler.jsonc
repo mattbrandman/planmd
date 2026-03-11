@@ -4,11 +4,15 @@
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  "routes": [
+    { "pattern": "planmd.dev", "custom_domain": true },
+    { "pattern": "www.planmd.dev", "custom_domain": true }
+  ],
   "d1_databases": [
     {
       "binding": "planmd_db",
       "database_name": "planmd-db",
-      "database_id": "local"
+      "database_id": "58336148-65db-491e-a2d2-e53f77445164"
     }
   ]
 }
