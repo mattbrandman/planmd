@@ -277,7 +277,7 @@ export default function CommentThread({
 				<button
 					type="button"
 					onClick={() => setReplying(!replying)}
-					className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+					className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 				>
 					<Reply className="h-3 w-3" />
 					Reply
@@ -285,7 +285,7 @@ export default function CommentThread({
 				<button
 					type="button"
 					onClick={handleToggleResolved}
-					className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+					className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 				>
 					{comment.resolved ? (
 						<>
@@ -308,7 +308,7 @@ export default function CommentThread({
 							type="button"
 							onClick={handleApplySuggestion}
 							disabled={applying}
-							className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60"
+							className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60"
 						>
 							<Check className="h-3 w-3" />
 							{applying ? "Applying..." : "Apply"}
@@ -319,7 +319,7 @@ export default function CommentThread({
 					<button
 						type="button"
 						onClick={handleToggleResolved}
-						className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+						className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 					>
 						<X className="h-3 w-3" />
 						Dismiss

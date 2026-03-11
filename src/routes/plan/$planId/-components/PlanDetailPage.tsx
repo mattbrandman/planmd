@@ -1060,21 +1060,21 @@ function BlockCommentWrapper({
 		return <Tag {...props}>{children}</Tag>;
 	}
 
+	const select = () =>
+		onLineSelect({ start: startLine, end: endLine ?? startLine });
+
 	return (
-		<div className="-mx-2 rounded-lg px-2 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]">
+		// biome-ignore lint/a11y/useKeyboardHandler: click-to-comment affordance, not a semantic control
+		<div
+			onClick={select}
+			className="-mx-2 cursor-pointer rounded-lg px-2 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
+		>
 			<Tag {...props}>{children}</Tag>
-			<button
-				type="button"
-				onClick={() =>
-					onLineSelect({ start: startLine, end: endLine ?? startLine })
-				}
-				className="absolute -right-2 top-1 translate-x-full opacity-0 transition-all group-hover/block:opacity-100 focus:opacity-100"
-				aria-label={`Comment on line${endLine && endLine !== startLine ? `s ${startLine}-${endLine}` : ` ${startLine}`}`}
-			>
-				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm transition hover:border-[var(--lagoon)] hover:text-[var(--lagoon-deep)]">
+			<span className="pointer-events-none absolute -right-2 top-1 translate-x-full opacity-0 transition-all group-hover/block:opacity-100">
+				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm">
 					<MessageSquare className="h-3 w-3" />
 				</span>
-			</button>
+			</span>
 		</div>
 	);
 }

@@ -133,16 +133,21 @@ export default function LineNumberedContent({
 				}
 
 				return (
+					// biome-ignore lint/a11y/useKeyboardHandler: line gutter button handles keyboard
 					<div
 						key={lineNum}
 						data-line={lineNum}
-						className={`line-row group ${bgClass}`}
+						className={`line-row group cursor-pointer ${bgClass}`}
+						onClick={(e) => handleLineClick(lineNum, e.shiftKey)}
 					>
 						{/* Gutter */}
 						<button
 							type="button"
 							className="line-gutter"
-							onClick={(e) => handleLineClick(lineNum, e.shiftKey)}
+							onClick={(e) => {
+								e.stopPropagation();
+								handleLineClick(lineNum, e.shiftKey);
+							}}
 							aria-label={`Line ${lineNum}`}
 						>
 							<span className="line-number">{lineNum}</span>
@@ -174,7 +179,10 @@ export default function LineNumberedContent({
 							<button
 								type="button"
 								className="line-add-comment"
-								onClick={(e) => handleLineClick(lineNum, e.shiftKey)}
+								onClick={(e) => {
+									e.stopPropagation();
+									handleLineClick(lineNum, e.shiftKey);
+								}}
 								aria-label={`Comment on line ${lineNum}`}
 							>
 								<MessageSquare className="h-3.5 w-3.5" />
