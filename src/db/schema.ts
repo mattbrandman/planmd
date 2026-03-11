@@ -7,7 +7,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 // ── Users ──────────────────────────────────────────────────────────────────────
-// Managed by Better Auth, but we reference them in our tables
+// Synced from Clerk on auth; referenced by plans, comments, reviews, etc.
 export const users = sqliteTable("user", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),

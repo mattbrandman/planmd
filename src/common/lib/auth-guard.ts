@@ -1,11 +1,11 @@
 import { env } from "cloudflare:workers";
+import { auth } from "@clerk/tanstack-react-start/server";
 import { redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
-import { getAuth } from "#/common/lib/auth";
 import { getDb } from "#/db";
 import { users } from "#/db/schema";
+import { syncUser } from "#/common/lib/auth";
 
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const DEV_BYPASS_AUTH = process.env.DEV_BYPASS_AUTH === "true";
@@ -20,10 +20,6 @@ const DEV_USER = {
 	updatedAt: new Date(),
 };
 
-/**
- * Ensure the dev user exists in the database.
- * Only runs once when DEV_BYPASS_AUTH is enabled.
- */
 let devUserSeeded = false;
 async function ensureDevUser() {
 	if (devUserSeeded) return;
@@ -40,32 +36,52 @@ async function ensureDevUser() {
 }
 
 /**
- * Server function to get the current session. Used in route loaders
- * and beforeLoad guards.
+ * Server function to get the current session.
+ * Returns { user } or null.
  */
 export const getSession = createServerFn({ method: "GET" }).handler(
 	async () => {
 		if (DEV_MODE && DEV_BYPASS_AUTH) {
 			await ensureDevUser();
-			return {
-				user: DEV_USER,
-				session: {
-					id: "dev-session",
-					token: "dev-token",
-					expiresAt: new Date(Date.now() + 86400000),
-					createdAt: new Date(),
-					updatedAt: new Date(),
-					ipAddress: null,
-					userAgent: null,
-					userId: DEV_USER.id,
-				},
+			return { user: DEV_USER };
+		}
+
+		const { userId } = await auth();
+		if (!userId) return null;
+
+		// Check local DB first, sync if not found
+		const db = getDb(env.planmd_db);
+		let localUser = await db
+			.select()
+			.from(users)
+			.where(eq(users.id, userId))
+			.limit(1)
+			.then((rows) => rows[0] ?? null);
+
+		if (!localUser) {
+			const synced = await syncUser(userId);
+			localUser = {
+				id: synced.id,
+				name: synced.name,
+				email: synced.email,
+				emailVerified: true,
+				image: synced.image,
+				createdAt: new Date(),
+				updatedAt: new Date(),
 			};
 		}
 
-		const request = getRequest()!;
-		const auth = getAuth();
-		const session = await auth.api.getSession({ headers: request.headers });
-		return session;
+		return {
+			user: {
+				id: localUser.id,
+				name: localUser.name,
+				email: localUser.email,
+				emailVerified: localUser.emailVerified,
+				image: localUser.image,
+				createdAt: localUser.createdAt,
+				updatedAt: localUser.updatedAt,
+			},
+		};
 	},
 );
 
@@ -83,7 +99,7 @@ export async function authGuard() {
 
 /**
  * Server function to require auth inside server functions.
- * Throws if not authenticated.
+ * Throws if not authenticated. Returns the user.
  */
 export const requireAuth = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -92,14 +108,39 @@ export const requireAuth = createServerFn({ method: "GET" }).handler(
 			return DEV_USER;
 		}
 
-		const request = getRequest()!;
-		const auth = getAuth();
-		const session = await auth.api.getSession({ headers: request.headers });
+		const { userId } = await auth();
+		if (!userId) throw new Error("Unauthorized");
 
-		if (!session?.user) {
-			throw new Error("Unauthorized");
+		// Check local DB first, sync if not found
+		const db = getDb(env.planmd_db);
+		let localUser = await db
+			.select()
+			.from(users)
+			.where(eq(users.id, userId))
+			.limit(1)
+			.then((rows) => rows[0] ?? null);
+
+		if (!localUser) {
+			const synced = await syncUser(userId);
+			return {
+				id: synced.id,
+				name: synced.name,
+				email: synced.email,
+				emailVerified: true,
+				image: synced.image,
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			};
 		}
 
-		return session.user;
+		return {
+			id: localUser.id,
+			name: localUser.name,
+			email: localUser.email,
+			emailVerified: localUser.emailVerified,
+			image: localUser.image,
+			createdAt: localUser.createdAt,
+			updatedAt: localUser.updatedAt,
+		};
 	},
 );

@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignInSplatRouteImport } from './routes/sign-in/$'
 import { Route as PlanNewRouteRouteImport } from './routes/plan/new/route'
 import { Route as PlanPlanIdIndexRouteImport } from './routes/plan/$planId/index'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as PlanPlanIdHistoryRouteRouteImport } from './routes/plan/$planId/history/route'
 
 const IndexRoute = IndexRouteImport.update({
@@ -36,11 +35,6 @@ const PlanPlanIdIndexRoute = PlanPlanIdIndexRouteImport.update({
   path: '/plan/$planId/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PlanPlanIdHistoryRouteRoute = PlanPlanIdHistoryRouteRouteImport.update({
   id: '/plan/$planId/history',
   path: '/plan/$planId/history',
@@ -52,7 +46,6 @@ export interface FileRoutesByFullPath {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -60,7 +53,6 @@ export interface FileRoutesByTo {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/plan/$planId': typeof PlanPlanIdIndexRoute
 }
 export interface FileRoutesById {
@@ -69,7 +61,6 @@ export interface FileRoutesById {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -79,7 +70,6 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
-    | '/api/auth/$'
     | '/plan/$planId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -87,7 +77,6 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
-    | '/api/auth/$'
     | '/plan/$planId'
   id:
     | '__root__'
@@ -95,7 +84,6 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
-    | '/api/auth/$'
     | '/plan/$planId/'
   fileRoutesById: FileRoutesById
 }
@@ -104,7 +92,6 @@ export interface RootRouteChildren {
   PlanNewRouteRoute: typeof PlanNewRouteRoute
   SignInSplatRoute: typeof SignInSplatRoute
   PlanPlanIdHistoryRouteRoute: typeof PlanPlanIdHistoryRouteRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   PlanPlanIdIndexRoute: typeof PlanPlanIdIndexRoute
 }
 
@@ -138,13 +125,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlanPlanIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/plan/$planId/history': {
       id: '/plan/$planId/history'
       path: '/plan/$planId/history'
@@ -160,7 +140,6 @@ const rootRouteChildren: RootRouteChildren = {
   PlanNewRouteRoute: PlanNewRouteRoute,
   SignInSplatRoute: SignInSplatRoute,
   PlanPlanIdHistoryRouteRoute: PlanPlanIdHistoryRouteRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
   PlanPlanIdIndexRoute: PlanPlanIdIndexRoute,
 }
 export const routeTree = rootRouteImport

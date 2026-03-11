@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import ThemeToggle from "#/common/components/ThemeToggle";
 import { brandButtonSurfaceClassName } from "#/common/components/ui/button";
-import BetterAuthHeader from "#/common/integrations/better-auth/header-user";
+import HeaderUser from "#/common/integrations/better-auth/header-user";
 import { cn } from "#/common/lib/utils";
 
 export default function Header() {
@@ -51,7 +51,7 @@ export default function Header() {
 
 					<div className="flex items-center gap-2">
 						<ThemeToggle />
-						<BetterAuthHeader />
+						<HeaderUser />
 					</div>
 				</div>
 			</nav>
