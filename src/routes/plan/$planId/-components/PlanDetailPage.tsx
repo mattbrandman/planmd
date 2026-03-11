@@ -620,7 +620,6 @@ export default function PlanDetailPage({
 
 						{/* Comment sidebar */}
 						<aside
-							key={comments.length}
 							className="rise-in space-y-4"
 							style={{ animationDelay: "180ms" }}
 						>

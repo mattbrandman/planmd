@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 - **Framework**: TanStack Start (React 19 + Vite + SSR)
 - **Routing**: TanStack Router (file-based routing in `src/routes/`)
 - **Database**: Cloudflare D1 (SQLite) with Drizzle ORM
-- **Auth**: Better Auth (GitHub OAuth)
+- **Auth**: Clerk (`@clerk/tanstack-react-start`)
 - **UI**: Tailwind CSS 4 + shadcn/ui components (new-york style) + Radix UI primitives
 - **Icons**: lucide-react
 - **Validation**: Zod
@@ -57,12 +57,11 @@ src/
 │   │           ├── route.tsx                  # /plan/:planId/history
 │   │           └── -components/               # RevisionHistory, DiffView
 │   │
-│   ├── sign-in/
-│   │   ├── $.tsx                              # /sign-in/*
-│   │   └── -SignInPage.tsx
-│   │
-│   └── api/auth/$.ts                          # Better Auth server route
+│   └── sign-in/
+│       ├── $.tsx                              # /sign-in/* (Clerk SignIn component)
+│       └── -SignInPage.tsx
 │
+├── start.ts                                   # Clerk middleware (clerkMiddleware)
 ├── common/                                    # Shared across all pages
 │   ├── api/                                   # Shared server functions
 │   ├── components/
@@ -70,11 +69,10 @@ src/
 │   │   ├── ThemeToggle.tsx                    # Dark/light mode
 │   │   └── ui/                                # shadcn/ui primitives
 │   ├── integrations/
-│   │   └── better-auth/                       # Auth provider + components
+│   │   └── better-auth/                       # Auth UI components (HeaderUser)
 │   └── lib/
 │       ├── utils.ts                           # cn() utility
-│       ├── auth.ts                            # Better Auth server config
-│       └── auth-client.ts                     # Better Auth client
+│       └── auth.ts                            # Clerk user sync (syncUser)
 │
 ├── db/                                        # Database layer
 │   ├── schema.ts                              # Drizzle schema definitions
@@ -200,13 +198,73 @@ Within a route directory, prefer relative imports: `./-components/MyComponent`, 
 - Components use PascalCase, utilities use camelCase
 - Run `pnpm check` before committing
 
+## Deployment
+
+- **Hosting**: Cloudflare Workers (custom domains: `planmd.dev`, `www.planmd.dev`)
+- **Database**: D1 database `planmd-db` (ID: `58336148-65db-491e-a2d2-e53f77445164`)
+- **GitHub repo**: `mattbrandman/planmd`
+- **VCS**: Jujutsu (`jj`) — use `jj bookmark set main -r @` + `jj git push --bookmark main` to push
+- **Deploy manually**: `pnpm deploy` (builds + `wrangler deploy`)
+- **Apply migrations to prod**: `npx wrangler d1 migrations apply planmd-db --remote`
+- **Secrets** (set via `wrangler secret put`): `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
+
 ## Environment Variables
 
 Required in `.env.local`:
 
 - `DATABASE_URL` — SQLite database path (dev: `dev.db`)
-- `BETTER_AUTH_URL` — Auth base URL (dev: `http://localhost:3000`)
-- `BETTER_AUTH_SECRET` — Auth secret key (generate: `pnpm dlx @better-auth/cli secret`)
+- `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (use `pk_test_` for dev, `pk_live_` for prod)
+- `CLERK_SECRET_KEY` — Clerk secret key (use `sk_test_` for dev, `sk_live_` for prod)
+
+Optional for dev:
+
+- `DEV_BYPASS_AUTH=true` + `VITE_DEV_BYPASS_AUTH=true` — Skip Clerk and use a dummy dev user
+
+## Authentication (Clerk)
+
+Clerk manages users externally. A local `users` table syncs Clerk user data on first interaction (via `syncUser()` in `auth.ts`).
+
+### Key files
+
+- `src/start.ts` — `clerkMiddleware()` registered as request middleware
+- `src/common/lib/auth.ts` — `syncUser(userId)` upserts Clerk user into local DB
+- `src/common/lib/auth-guard.ts` — `getSession()`, `authGuard()`, `requireAuth()` server functions
+- `src/routes/__root.tsx` — `<ClerkProvider>` wraps the app
+- `src/common/integrations/better-auth/header-user.tsx` — Uses Clerk `<UserButton>`, `<SignInButton>`, `<Show>`
+
+### Server-side auth in server functions
+
+```typescript
+import { auth } from "@clerk/tanstack-react-start/server"
+
+// Get userId directly
+const { userId } = await auth()
+
+// Or use the existing helpers (preferred — they sync to local DB):
+import { requireAuth } from "#/common/lib/auth-guard"
+const user = await requireAuth() // throws if not authed, returns local user
+```
+
+### Route protection
+
+```typescript
+import { authGuard } from "#/common/lib/auth-guard"
+
+export const Route = createFileRoute("/protected")({
+  beforeLoad: async () => await authGuard(), // redirects to /sign-in if not authed
+})
+```
+
+### Client-side auth
+
+```typescript
+import { useAuth, useUser } from "@clerk/tanstack-react-start"
+import { Show, UserButton, SignInButton } from "@clerk/tanstack-react-start"
+```
+
+### Database schema
+
+The `users` table stores synced Clerk data (id, name, email, image). All other tables (plans, comments, reviews, etc.) reference `users.id` which is the Clerk `userId`. The old Better Auth tables (session, account, verification) have been removed from the schema.
 
 ## Gotchas
 
@@ -229,6 +287,21 @@ For client-side filtering of loader data, use `useMemo` instead of `useEffect` +
 ### useServerFn Hook (TanStack Start)
 
 Only intercepts `redirect()` from server functions. Does NOT provide pending state. Call server functions directly if no redirect is needed.
+
+### Comment Carry-Forward + Suggestions
+
+The comment system spans several files. Key things to know:
+
+- **`src/common/api/plans.ts`** contains `carryForwardComments()` (internal, not a server fn) — called automatically by `createRevision` and `applySuggestion`. It duplicates unresolved comments into the new revision with provenance tracking.
+- **`src/common/lib/diff.ts`** has shared diff utilities used by both the carry-forward algorithm (line tracking, section comparison, context snapshots) and UI components (Myers diff for history page and suggestion diffs). Uses `diff` npm package.
+- **`addComment` accepts optional `suggestionType` / `suggestionContent`** — don't break this when modifying the validator.
+- **Resolved comments collapse** in CommentThread via `expanded` state synced to `comment.resolved`. Don't remove the `useEffect` that auto-collapses on resolve.
+- **The "Add Comment" sidebar button** is always rendered when no composer is active — it creates general comments (null section, null lines). Works in both Rendered and Source modes.
+- See `docs/features/comment-preservation.md` for the full algorithm, schema, and testing checklist.
+
+### D1 Migrations
+
+Migrations live in `migrations/` (not `drizzle/`). The `drizzle/` folder is for drizzle-kit only. When adding columns, update BOTH the Drizzle schema (`src/db/schema.ts`) AND create a new migration in `migrations/`. Run `npx wrangler d1 migrations apply planmd-db --local` to apply.
 
 ## Notes
 

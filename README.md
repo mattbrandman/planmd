@@ -4,6 +4,8 @@ Collaborative plan review app for developer teams. Teams submit detailed plannin
 
 **Workflow:** Write plan → Share for review → Discuss via inline comments → Revise → Reach consensus → Hand off to AI agents
 
+**Live:** [planmd.dev](https://planmd.dev)
+
 ## Features
 
 - **Markdown plan creation** with live preview
@@ -11,14 +13,14 @@ Collaborative plan review app for developer teams. Teams submit detailed plannin
 - **Review/approval workflow** with consensus tracking and a visual consensus bar
 - **Revision history** with diff view between versions
 - **Role-based participants** — author, reviewer, observer
-- **GitHub OAuth** authentication (with dev bypass mode for local development)
+- **Clerk authentication** (with dev bypass mode for local development)
 
 ## Tech Stack
 
 - **TanStack Start** — React 19, Vite, SSR
 - **TanStack Router** — file-based routing
 - **Cloudflare D1** (SQLite) with **Drizzle ORM**
-- **Better Auth** — GitHub OAuth
+- **Clerk** — authentication (`@clerk/tanstack-react-start`)
 - **Tailwind CSS 4** + **shadcn/ui** (new-york style)
 - **Biome** — formatting and linting
 - **Vitest** — testing
@@ -39,12 +41,10 @@ Set these in `.env.local`:
 
 | Variable | Description |
 |---|---|
-| `BETTER_AUTH_SECRET` | Auth secret key (generate with `pnpm dlx @better-auth/cli secret`) |
-| `BETTER_AUTH_URL` | Auth base URL (`http://localhost:3000` for dev) |
-| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (`pk_test_` for dev) |
+| `CLERK_SECRET_KEY` | Clerk secret key (`sk_test_` for dev) |
 
-For local development without GitHub OAuth, set `DEV_BYPASS_AUTH=true` and `VITE_DEV_BYPASS_AUTH=true` to use a seeded dev user.
+For local development without Clerk, set `DEV_BYPASS_AUTH=true` and `VITE_DEV_BYPASS_AUTH=true` to use a seeded dev user.
 
 ## Commands
 
@@ -59,14 +59,33 @@ pnpm db:push      # Push schema to database
 pnpm db:studio    # Open Drizzle Studio GUI
 ```
 
+## Deployment
+
+Deployed to Cloudflare Workers with custom domains `planmd.dev` and `www.planmd.dev`.
+
+```bash
+# Deploy manually
+pnpm deploy
+
+# Apply migrations to production D1
+npx wrangler d1 migrations apply planmd-db --remote
+
+# Set production secrets
+npx wrangler secret put VITE_CLERK_PUBLISHABLE_KEY
+npx wrangler secret put CLERK_SECRET_KEY
+```
+
+GitHub integration (Workers Builds) auto-deploys on push to `main`.
+
 ## Project Structure
 
 Directory-based routing with colocation. Each route's components, API functions, and hooks live in `-prefixed` directories next to the route file.
 
 ```
 src/
+├── start.ts                       # Clerk middleware
 ├── routes/                        # File-based routing
-│   ├── __root.tsx                 # Root layout
+│   ├── __root.tsx                 # Root layout (ClerkProvider)
 │   ├── index.tsx                  # Dashboard (/)
 │   ├── plan/
 │   │   ├── new/                   # /plan/new — create a plan
@@ -75,13 +94,13 @@ src/
 │   │       ├── -components/       # Inline comments, consensus bar, etc.
 │   │       ├── -api/              # Plan detail server functions
 │   │       └── history/           # /plan/:planId/history — diff view
-│   ├── sign-in/                   # GitHub OAuth sign-in
-│   └── api/auth/                  # Better Auth server route
+│   └── sign-in/                   # Clerk sign-in page
 │
 ├── common/                        # Shared across 2+ routes
+│   ├── api/                       # Shared server functions
 │   ├── components/ui/             # shadcn/ui primitives
-│   ├── integrations/better-auth/  # Auth provider
-│   └── lib/                       # Utils, auth config
+│   ├── integrations/better-auth/  # Auth UI (HeaderUser)
+│   └── lib/                       # Utils, auth sync, auth guards
 │
 └── db/                            # Drizzle schema + database init
 ```

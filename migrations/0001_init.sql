@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS `comments` (
   `revision_id` TEXT NOT NULL REFERENCES `revisions`(`id`) ON DELETE CASCADE,
   `author_id` TEXT NOT NULL REFERENCES `user`(`id`),
   `section_id` TEXT,
+  `start_line` INTEGER,
+  `end_line` INTEGER,
   `parent_id` TEXT,
   `body` TEXT NOT NULL,
   `resolved` INTEGER NOT NULL DEFAULT 0,
