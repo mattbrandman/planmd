@@ -340,6 +340,7 @@ export default function PlanDetailPage({
 	function handleLineSelect(range: LineRange) {
 		setSelectedLines(range);
 		setActiveSection(null);
+		setGeneralComposing(false);
 		setHighlightedLines(null);
 		// Pre-fill suggestion content with selected lines
 		const selected = contentLines.slice(range.start - 1, range.end).join("\n");
@@ -601,6 +602,74 @@ export default function PlanDetailPage({
 												>
 													{children}
 												</SectionHeading>
+											),
+											p: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="p"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											ul: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="ul"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											ol: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="ol"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											blockquote: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="blockquote"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											pre: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="pre"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											table: ({ node, children, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="table"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												>
+													{children}
+												</BlockCommentWrapper>
+											),
+											hr: ({ node, ...rest }) => (
+												<BlockCommentWrapper
+													node={node}
+													tag="hr"
+													onLineSelect={handleLineSelect}
+													{...rest}
+												/>
 											),
 										}}
 									>
@@ -967,4 +1036,45 @@ function SectionHeading({
 	if (level === 1) return <h1 {...props} />;
 	if (level === 2) return <h2 {...props} />;
 	return <h3 {...props} />;
+}
+
+// ── Block-level comment wrapper for rendered mode ──────────────────────────────
+
+function BlockCommentWrapper({
+	node,
+	tag: Tag,
+	onLineSelect,
+	children,
+	...props
+}: {
+	node?: { position?: { start: { line: number }; end: { line: number } } };
+	tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr";
+	onLineSelect: (range: { start: number; end: number }) => void;
+	children?: ReactNode;
+	[key: string]: unknown;
+}) {
+	const startLine = node?.position?.start.line;
+	const endLine = node?.position?.end.line;
+
+	if (startLine == null) {
+		return <Tag {...props}>{children}</Tag>;
+	}
+
+	return (
+		<div className="-mx-2 rounded-lg px-2 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]">
+			<Tag {...props}>{children}</Tag>
+			<button
+				type="button"
+				onClick={() =>
+					onLineSelect({ start: startLine, end: endLine ?? startLine })
+				}
+				className="absolute -right-2 top-1 translate-x-full opacity-0 transition-all group-hover/block:opacity-100 focus:opacity-100"
+				aria-label={`Comment on line${endLine && endLine !== startLine ? `s ${startLine}-${endLine}` : ` ${startLine}`}`}
+			>
+				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm transition hover:border-[var(--lagoon)] hover:text-[var(--lagoon-deep)]">
+					<MessageSquare className="h-3 w-3" />
+				</span>
+			</button>
+		</div>
+	);
 }
