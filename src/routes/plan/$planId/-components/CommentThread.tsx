@@ -50,6 +50,7 @@ interface CommentThreadProps {
 	planId: string;
 	revisionId: string;
 	isAuthor?: boolean;
+	canInteract?: boolean;
 	/** Content lines for the target range (used for suggestion diff) */
 	targetLines?: string;
 	/** Revision number where comment originated (for provenance) */
@@ -62,6 +63,7 @@ export default function CommentThread({
 	planId,
 	revisionId,
 	isAuthor,
+	canInteract = true,
 	targetLines,
 	originalRevisionNumber,
 }: CommentThreadProps) {
@@ -76,10 +78,16 @@ export default function CommentThread({
 	const [submitting, setSubmitting] = useState(false);
 	const [showContext, setShowContext] = useState(false);
 	const [applying, setApplying] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	async function handleReply() {
+		if (!canInteract) {
+			setError("Sign in to reply to comments.");
+			return;
+		}
 		if (!replyText.trim()) return;
 		setSubmitting(true);
+		setError(null);
 		try {
 			await addComment({
 				data: {
@@ -95,21 +103,39 @@ export default function CommentThread({
 			setReplyText("");
 			setReplying(false);
 			router.invalidate();
+		} catch (err) {
+			setError(getActionError(err, "Failed to post reply"));
 		} finally {
 			setSubmitting(false);
 		}
 	}
 
 	async function handleToggleResolved() {
-		await toggleCommentResolved({ data: { commentId: comment.id } });
-		router.invalidate();
+		if (!canInteract) {
+			setError("Sign in to update comments.");
+			return;
+		}
+		setError(null);
+		try {
+			await toggleCommentResolved({ data: { commentId: comment.id } });
+			router.invalidate();
+		} catch (err) {
+			setError(getActionError(err, "Failed to update comment"));
+		}
 	}
 
 	async function handleApplySuggestion() {
+		if (!canInteract) {
+			setError("Sign in to apply suggestions.");
+			return;
+		}
 		setApplying(true);
+		setError(null);
 		try {
 			await applySuggestion({ data: { commentId: comment.id } });
 			router.invalidate();
+		} catch (err) {
+			setError(getActionError(err, "Failed to apply suggestion"));
 		} finally {
 			setApplying(false);
 		}
@@ -273,62 +299,73 @@ export default function CommentThread({
 			)}
 
 			{/* Actions */}
-			<div className="mt-2 ml-8 flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					onClick={() => setReplying(!replying)}
-					className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-				>
-					<Reply className="h-3 w-3" />
-					Reply
-				</button>
-				<button
-					type="button"
-					onClick={handleToggleResolved}
-					className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-				>
-					{comment.resolved ? (
-						<>
-							<Circle className="h-3 w-3" />
-							Reopen
-						</>
-					) : (
-						<>
-							<CheckCircle2 className="h-3 w-3" />
-							Resolve
-						</>
-					)}
-				</button>
-				{/* Apply suggestion button (author only, not outdated, not applied) */}
-				{isSuggestion &&
-					!comment.suggestionApplied &&
-					!comment.outdated &&
-					isAuthor && (
-						<button
-							type="button"
-							onClick={handleApplySuggestion}
-							disabled={applying}
-							className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60"
-						>
-							<Check className="h-3 w-3" />
-							{applying ? "Applying..." : "Apply"}
-						</button>
-					)}
-				{/* Dismiss suggestion (same as resolve) */}
-				{isSuggestion && !comment.suggestionApplied && !comment.resolved && (
+			{canInteract && (
+				<div className="mt-2 ml-8 flex flex-wrap items-center gap-2">
+					<button
+						type="button"
+						onClick={() => {
+							setError(null);
+							setReplying(!replying);
+						}}
+						className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+					>
+						<Reply className="h-3 w-3" />
+						Reply
+					</button>
 					<button
 						type="button"
 						onClick={handleToggleResolved}
 						className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 					>
-						<X className="h-3 w-3" />
-						Dismiss
+						{comment.resolved ? (
+							<>
+								<Circle className="h-3 w-3" />
+								Reopen
+							</>
+						) : (
+							<>
+								<CheckCircle2 className="h-3 w-3" />
+								Resolve
+							</>
+						)}
 					</button>
-				)}
-			</div>
+					{/* Apply suggestion button (author only, not outdated, not applied) */}
+					{isSuggestion &&
+						!comment.suggestionApplied &&
+						!comment.outdated &&
+						isAuthor && (
+							<button
+								type="button"
+								onClick={handleApplySuggestion}
+								disabled={applying}
+								className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60"
+							>
+								<Check className="h-3 w-3" />
+								{applying ? "Applying..." : "Apply"}
+							</button>
+						)}
+					{/* Dismiss suggestion (same as resolve) */}
+					{isSuggestion && !comment.suggestionApplied && !comment.resolved && (
+						<button
+							type="button"
+							onClick={handleToggleResolved}
+							className="inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+						>
+							<X className="h-3 w-3" />
+							Dismiss
+						</button>
+					)}
+				</div>
+			)}
+
+			{error && (
+				<div className="mt-2 ml-8 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+					{error}
+				</div>
+			)}
 
 			{/* Reply composer */}
-			{replying && (
+			{canInteract && replying && (
 				<div className="mt-2 ml-8">
 					<Textarea
 						value={replyText}
@@ -365,6 +402,12 @@ export default function CommentThread({
 			)}
 		</div>
 	);
+}
+
+function getActionError(err: unknown, fallback: string): string {
+	if (!(err instanceof Error) || !err.message) return fallback;
+	if (err.message === "Unauthorized") return "Sign in to continue.";
+	return err.message;
 }
 
 function formatDate(date: Date): string {

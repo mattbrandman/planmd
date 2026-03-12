@@ -1,4 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
+import { SignInButton } from "@clerk/tanstack-react-start";
 import {
 	AlertTriangle,
 	Check,
@@ -154,6 +155,7 @@ export default function PlanDetailPage({
 }: PlanDetailProps) {
 	const router = useRouter();
 	const isAuthor = currentUser?.id === plan.authorId;
+	const canComment = currentUser != null;
 
 	const [editing, setEditing] = useState(false);
 	const [viewMode, setViewMode] = useState<ViewMode>("rendered");
@@ -168,6 +170,7 @@ export default function PlanDetailPage({
 	const [composerMode, setComposerMode] = useState<ComposerMode>("comment");
 	const [suggestionContent, setSuggestionContent] = useState("");
 	const [generalComposing, setGeneralComposing] = useState(false);
+	const [commentError, setCommentError] = useState<string | null>(null);
 
 	const content = latestRevision?.content ?? "";
 	const contentLines = useMemo(() => content.split("\n"), [content]);
@@ -259,8 +262,13 @@ export default function PlanDetailPage({
 	const totalTopLevel = comments.filter((c) => !c.parentId).length;
 
 	async function handleAddSectionComment(sectionId: string | null) {
+		if (!canComment) {
+			setCommentError("Sign in to comment on this plan.");
+			return;
+		}
 		if (!commentDraft.trim() || !latestRevision) return;
 		setSubmittingComment(true);
+		setCommentError(null);
 		try {
 			await addComment({
 				data: {
@@ -276,14 +284,21 @@ export default function PlanDetailPage({
 			setCommentDraft("");
 			setActiveSection(null);
 			router.invalidate();
+		} catch (err) {
+			setCommentError(getActionError(err, "Failed to post comment"));
 		} finally {
 			setSubmittingComment(false);
 		}
 	}
 
 	async function handleAddGeneralComment() {
+		if (!canComment) {
+			setCommentError("Sign in to comment on this plan.");
+			return;
+		}
 		if (!commentDraft.trim() || !latestRevision) return;
 		setSubmittingComment(true);
+		setCommentError(null);
 		try {
 			await addComment({
 				data: {
@@ -299,14 +314,21 @@ export default function PlanDetailPage({
 			setCommentDraft("");
 			setGeneralComposing(false);
 			router.invalidate();
+		} catch (err) {
+			setCommentError(getActionError(err, "Failed to post comment"));
 		} finally {
 			setSubmittingComment(false);
 		}
 	}
 
 	async function handleAddLineComment() {
+		if (!canComment) {
+			setCommentError("Sign in to comment on this plan.");
+			return;
+		}
 		if (!commentDraft.trim() || !latestRevision || !selectedLines) return;
 		setSubmittingComment(true);
+		setCommentError(null);
 
 		const isSuggestion = composerMode === "suggest" && suggestionContent.trim();
 
@@ -332,12 +354,16 @@ export default function PlanDetailPage({
 			setSelectedLines(null);
 			setComposerMode("comment");
 			router.invalidate();
+		} catch (err) {
+			setCommentError(getActionError(err, "Failed to post comment"));
 		} finally {
 			setSubmittingComment(false);
 		}
 	}
 
 	function handleLineSelect(range: LineRange) {
+		if (!canComment) return;
+		setCommentError(null);
 		setSelectedLines(range);
 		setActiveSection(null);
 		setGeneralComposing(false);
@@ -574,7 +600,11 @@ export default function PlanDetailPage({
 													commentCount={
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
-													onComment={() => setActiveSection(id ?? null)}
+													canComment={canComment}
+													onComment={() => {
+														setCommentError(null);
+														setActiveSection(id ?? null);
+													}}
 												>
 													{children}
 												</SectionHeading>
@@ -586,7 +616,11 @@ export default function PlanDetailPage({
 													commentCount={
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
-													onComment={() => setActiveSection(id ?? null)}
+													canComment={canComment}
+													onComment={() => {
+														setCommentError(null);
+														setActiveSection(id ?? null);
+													}}
 												>
 													{children}
 												</SectionHeading>
@@ -598,7 +632,11 @@ export default function PlanDetailPage({
 													commentCount={
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
-													onComment={() => setActiveSection(id ?? null)}
+													canComment={canComment}
+													onComment={() => {
+														setCommentError(null);
+														setActiveSection(id ?? null);
+													}}
 												>
 													{children}
 												</SectionHeading>
@@ -607,6 +645,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="p"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -617,6 +656,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="ul"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -627,6 +667,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="ol"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -637,6 +678,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="blockquote"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -647,6 +689,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="pre"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -657,6 +700,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="table"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												>
@@ -667,6 +711,7 @@ export default function PlanDetailPage({
 												<BlockCommentWrapper
 													node={node}
 													tag="hr"
+													canComment={canComment}
 													onLineSelect={handleLineSelect}
 													{...rest}
 												/>
@@ -728,19 +773,38 @@ export default function PlanDetailPage({
 
 							{/* Add comment button (always visible when not composing) */}
 							{!isComposing && (
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={() => {
-										setGeneralComposing(true);
-										setSelectedLines(null);
-										setActiveSection(null);
-									}}
-									className="w-full rounded-full"
-								>
-									<MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-									Add Comment
-								</Button>
+								canComment ? (
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={() => {
+											setCommentError(null);
+											setGeneralComposing(true);
+											setSelectedLines(null);
+											setActiveSection(null);
+										}}
+										className="w-full rounded-full"
+									>
+										<MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+										Add Comment
+									</Button>
+								) : (
+									<SignInButton mode="redirect">
+										<button
+											type="button"
+											className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
+										>
+											<MessageSquare className="h-3.5 w-3.5" />
+											Sign In to Comment
+										</button>
+									</SignInButton>
+								)
+							)}
+
+							{commentError && (
+								<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+									{commentError}
+								</div>
 							)}
 
 							{/* General comment composer */}
@@ -956,6 +1020,7 @@ export default function PlanDetailPage({
 												planId={plan.id}
 												revisionId={latestRevision?.id ?? ""}
 												isAuthor={isAuthor}
+												canInteract={canComment}
 												targetLines={getTargetLines(comment)}
 												originalRevisionNumber={getOriginalRevisionNumber(
 													comment,
@@ -981,6 +1046,7 @@ export default function PlanDetailPage({
 												planId={plan.id}
 												revisionId={latestRevision?.id ?? ""}
 												isAuthor={isAuthor}
+												canInteract={canComment}
 												originalRevisionNumber={getOriginalRevisionNumber(
 													comment,
 												)}
@@ -1013,12 +1079,14 @@ function SectionHeading({
 	id,
 	level,
 	commentCount,
+	canComment,
 	onComment,
 	children,
 }: {
 	id: string | undefined;
 	level: number;
 	commentCount: number;
+	canComment: boolean;
 	onComment: () => void;
 	children: ReactNode;
 }) {
@@ -1028,7 +1096,11 @@ function SectionHeading({
 		children: (
 			<>
 				{children}
-				<SectionCommentButton count={commentCount} onClick={onComment} />
+				<SectionCommentButton
+					count={commentCount}
+					onClick={onComment}
+					disabled={!canComment}
+				/>
 			</>
 		),
 	};
@@ -1043,12 +1115,14 @@ function SectionHeading({
 function BlockCommentWrapper({
 	node,
 	tag: Tag,
+	canComment,
 	onLineSelect,
 	children,
 	...props
 }: {
 	node?: { position?: { start: { line: number }; end: { line: number } } };
 	tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr";
+	canComment: boolean;
 	onLineSelect: (range: { start: number; end: number }) => void;
 	children?: ReactNode;
 	[key: string]: unknown;
@@ -1056,7 +1130,7 @@ function BlockCommentWrapper({
 	const startLine = node?.position?.start.line;
 	const endLine = node?.position?.end.line;
 
-	if (startLine == null) {
+	if (startLine == null || !canComment) {
 		return <Tag {...props}>{children}</Tag>;
 	}
 
@@ -1077,4 +1151,10 @@ function BlockCommentWrapper({
 			</span>
 		</div>
 	);
+}
+
+function getActionError(err: unknown, fallback: string): string {
+	if (!(err instanceof Error) || !err.message) return fallback;
+	if (err.message === "Unauthorized") return "Sign in to continue.";
+	return err.message;
 }

@@ -3,12 +3,16 @@ import { MessageSquare } from "lucide-react";
 interface SectionCommentButtonProps {
 	count: number;
 	onClick: () => void;
+	disabled?: boolean;
 }
 
 export default function SectionCommentButton({
 	count,
 	onClick,
+	disabled = false,
 }: SectionCommentButtonProps) {
+	if (disabled) return null;
+
 	return (
 		<button
 			type="button"
