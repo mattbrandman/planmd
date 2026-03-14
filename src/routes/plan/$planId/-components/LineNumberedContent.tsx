@@ -1,8 +1,5 @@
 import { MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeSlug from "rehype-slug";
-import remarkGfm from "remark-gfm";
 
 export interface LineRange {
 	start: number;
@@ -20,17 +17,11 @@ interface LineNumberedContentProps {
 	selectedLines: LineRange | null;
 	commentedLines: LineComment[];
 	highlightedLines: LineRange | null;
+	onVisibleRangeChange?: (range: LineRange) => void;
 }
 
 /**
- * Renders markdown content with a line-number gutter.
- *
- * Each source line is rendered as its own markdown block so we get
- * full formatting (headings, bold, lists, code, etc.) while still
- * being able to annotate, highlight, and click individual lines.
- *
- * Consecutive blank lines are collapsed into a single empty row so the
- * gutter stays compact.
+ * Renders literal markdown source with a line-number gutter.
  */
 export default function LineNumberedContent({
 	content,
@@ -38,6 +29,7 @@ export default function LineNumberedContent({
 	selectedLines,
 	commentedLines,
 	highlightedLines,
+	onVisibleRangeChange,
 }: LineNumberedContentProps) {
 	const lines = useMemo(() => content.split("\n"), [content]);
 
@@ -103,6 +95,56 @@ export default function LineNumberedContent({
 		}
 	}, [highlightedLines]);
 
+	useEffect(() => {
+		if (!onVisibleRangeChange || !containerRef.current) return;
+
+		let frameId = 0;
+		const reportVisibleRange = () => {
+			frameId = 0;
+			const lineElements = Array.from(
+				containerRef.current?.querySelectorAll<HTMLElement>("[data-line]") ?? [],
+			);
+			if (lineElements.length === 0) return;
+
+			const visibleLines = lineElements
+				.map((element) => ({
+					line: Number(element.dataset.line),
+					rect: element.getBoundingClientRect(),
+				}))
+				.filter(
+					({ line, rect }) =>
+						Number.isFinite(line) &&
+						rect.bottom >= 0 &&
+						rect.top <= window.innerHeight,
+				)
+				.map(({ line }) => line)
+				.sort((left, right) => left - right);
+
+			if (visibleLines.length === 0) return;
+			onVisibleRangeChange({
+				start: visibleLines[0],
+				end: visibleLines[visibleLines.length - 1],
+			});
+		};
+
+		const scheduleReport = () => {
+			if (frameId !== 0) return;
+			frameId = window.requestAnimationFrame(reportVisibleRange);
+		};
+
+		scheduleReport();
+		window.addEventListener("scroll", scheduleReport, { passive: true });
+		window.addEventListener("resize", scheduleReport);
+
+		return () => {
+			if (frameId !== 0) {
+				window.cancelAnimationFrame(frameId);
+			}
+			window.removeEventListener("scroll", scheduleReport);
+			window.removeEventListener("resize", scheduleReport);
+		};
+	}, [content, onVisibleRangeChange]);
+
 	// Count comments per line for gutter badges
 	const commentCountByLine = useMemo(() => {
 		const counts = new Map<number, number>();
@@ -160,18 +202,7 @@ export default function LineNumberedContent({
 
 						{/* Content */}
 						<div className="line-content">
-							{line.trim() === "" ? (
-								<div className="h-6" />
-							) : (
-								<div className="prose prose-sm max-w-none">
-									<ReactMarkdown
-										remarkPlugins={[remarkGfm]}
-										rehypePlugins={[rehypeSlug]}
-									>
-										{line}
-									</ReactMarkdown>
-								</div>
-							)}
+							<pre className="line-source">{line || " "}</pre>
 						</div>
 
 						{/* Add comment button on hover (only for non-selected lines without existing selection) */}

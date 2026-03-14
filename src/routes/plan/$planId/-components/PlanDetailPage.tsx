@@ -16,11 +16,12 @@ import {
 	Pencil,
 	Send,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useCallback, useMemo, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
+import { addContextEvent } from "#/common/api/collaboration";
 import { addComment, submitReview, updatePlanStatus } from "#/common/api/plans";
 import { Button } from "#/common/components/ui/button";
 import { Separator } from "#/common/components/ui/separator";
@@ -31,6 +32,7 @@ import type { LineRange } from "./LineNumberedContent";
 import LineNumberedContent from "./LineNumberedContent";
 import RevisionEditor from "./RevisionEditor";
 import SectionCommentButton from "./SectionCommentButton";
+import SessionWorkspace from "./SessionWorkspace";
 
 const STATUS_CONFIG = {
 	draft: {
@@ -135,6 +137,93 @@ interface PlanDetailProps {
 		body: string | null;
 		createdAt: Date;
 	}>;
+	sessions: Array<{
+		session: {
+			id: string;
+			planId: string;
+			status: "live" | "ended";
+			meetingProvider: "google_meet" | "manual";
+			title: string | null;
+			captureToken: string;
+			createdBy: string;
+			startedAt: Date;
+			endedAt: Date | null;
+			createdAt: Date;
+			updatedAt: Date;
+		};
+		transcriptChunks: Array<{
+			id: string;
+			sessionId: string;
+			speakerName: string | null;
+			text: string;
+			occurredAt: Date;
+			source: string;
+			createdAt: Date;
+		}>;
+		contextEvents: Array<{
+			id: string;
+			sessionId: string;
+			kind: string;
+			pageUrl: string | null;
+			repo: string | null;
+			ref: string | null;
+			path: string | null;
+			visibleStartLine: number | null;
+			visibleEndLine: number | null;
+			selectedText: string | null;
+			selectedStartLine: number | null;
+			selectedEndLine: number | null;
+			activeSection: string | null;
+			payload: string | null;
+			occurredAt: Date;
+			createdAt: Date;
+		}>;
+		attentionItems: Array<{
+			id: string;
+			sessionId: string;
+			kind: string;
+			severity: "low" | "medium" | "high";
+			anchorType: string;
+			anchorId: string | null;
+			summary: string;
+			evidenceRefs: string | null;
+			state: string;
+			occurredAt: Date;
+			createdAt: Date;
+		}>;
+	}>;
+	snapshots: Array<{
+		id: string;
+		planId: string;
+		revisionId: string;
+		revisionNumber: number | null;
+		status: string;
+		isStale: boolean;
+		publicSlug: string;
+		callbackToken: string;
+		sessionIds: string[];
+		markdownContent: string;
+		jsonContent: string;
+		publishedAt: Date;
+		createdBy: string;
+		fetchUrl: string;
+		writebackUrl: string;
+		publicUrl: string;
+		agentRuns: Array<{
+			id: string;
+			snapshotId: string;
+			agentName: string;
+			externalRunId: string;
+			status: string;
+			prUrl: string | null;
+			branch: string | null;
+			testSummary: string | null;
+			artifactUrl: string | null;
+			suggestedPlanDelta: string | null;
+			createdAt: Date;
+			updatedAt: Date;
+		}>;
+	}>;
 	comments: CommentData[];
 	currentUser: {
 		id: string;
@@ -150,12 +239,16 @@ export default function PlanDetailPage({
 	latestRevision,
 	participants,
 	reviews,
+	sessions,
+	snapshots,
 	comments,
 	currentUser,
 }: PlanDetailProps) {
 	const router = useRouter();
 	const isAuthor = currentUser?.id === plan.authorId;
 	const canComment = currentUser != null;
+	const activeSession =
+		sessions.find((bundle) => bundle.session.status === "live") ?? null;
 
 	const [editing, setEditing] = useState(false);
 	const [viewMode, setViewMode] = useState<ViewMode>("rendered");
@@ -171,6 +264,10 @@ export default function PlanDetailPage({
 	const [suggestionContent, setSuggestionContent] = useState("");
 	const [generalComposing, setGeneralComposing] = useState(false);
 	const [commentError, setCommentError] = useState<string | null>(null);
+	const passiveEventRef = useRef<Map<string, { key: string; at: number }>>(
+		new Map(),
+	);
+	const visibleRangeTimeoutRef = useRef<number | null>(null);
 
 	const content = latestRevision?.content ?? "";
 	const contentLines = useMemo(() => content.split("\n"), [content]);
@@ -260,6 +357,129 @@ export default function PlanDetailPage({
 	const hasAnyComments =
 		commentsBySection.size > 0 || lineCommentGroups.length > 0;
 	const totalTopLevel = comments.filter((c) => !c.parentId).length;
+
+	const recordPlanInteraction = useCallback(
+		(args: {
+			kind: "page_view" | "selection" | "highlight" | "section_focus" | "note";
+			interaction:
+				| "plan_open"
+				| "view_mode"
+				| "visible_range"
+				| "line_select"
+				| "comment_highlight"
+				| "section_focus";
+			selectedLines?: LineRange | null;
+			visibleLines?: LineRange | null;
+			activeSection?: string | null;
+			payload?: Record<string, unknown>;
+			dedupeKey?: string;
+			throttleMs?: number;
+		}) => {
+			if (!activeSession || typeof window === "undefined") return;
+
+			const occurredAt = Date.now();
+			const dedupeKey =
+				args.dedupeKey ??
+				JSON.stringify({
+					kind: args.kind,
+					interaction: args.interaction,
+					activeSection: args.activeSection ?? null,
+					selectedLines: args.selectedLines ?? null,
+					visibleLines: args.visibleLines ?? null,
+					viewMode,
+				});
+			const throttleMs = args.throttleMs ?? 1200;
+			const previous = passiveEventRef.current.get(args.kind);
+			if (
+				previous &&
+				previous.key === dedupeKey &&
+				occurredAt - previous.at < throttleMs
+			) {
+				return;
+			}
+
+			passiveEventRef.current.set(args.kind, { key: dedupeKey, at: occurredAt });
+
+			void addContextEvent({
+				data: {
+					sessionId: activeSession.session.id,
+					kind: args.kind,
+					pageUrl: window.location.href,
+					path: `plans/${plan.id}`,
+					visibleStartLine: args.visibleLines?.start ?? null,
+					visibleEndLine: args.visibleLines?.end ?? null,
+					selectedStartLine: args.selectedLines?.start ?? null,
+					selectedEndLine: args.selectedLines?.end ?? null,
+					activeSection: args.activeSection ?? null,
+					payload: JSON.stringify({
+						surface: "plan_detail",
+						interaction: args.interaction,
+						viewMode,
+						revisionId: latestRevision?.id ?? null,
+						revisionNumber: latestRevision?.revisionNumber ?? null,
+						...args.payload,
+					}),
+					occurredAt,
+				},
+			}).catch(() => undefined);
+		},
+		[activeSession, latestRevision?.id, latestRevision?.revisionNumber, plan.id, viewMode],
+	);
+
+	const handleVisibleRangeChange = useCallback(
+		(range: LineRange) => {
+			if (!activeSession || viewMode !== "source") return;
+
+			if (visibleRangeTimeoutRef.current != null) {
+				window.clearTimeout(visibleRangeTimeoutRef.current);
+			}
+
+			visibleRangeTimeoutRef.current = window.setTimeout(() => {
+				recordPlanInteraction({
+					kind: "page_view",
+					interaction: "visible_range",
+					visibleLines: range,
+					dedupeKey: `visible:${viewMode}:${range.start}-${range.end}`,
+					throttleMs: 800,
+				});
+			}, 280);
+		},
+		[activeSession, recordPlanInteraction, viewMode],
+	);
+
+	useEffect(() => {
+		return () => {
+			if (visibleRangeTimeoutRef.current != null) {
+				window.clearTimeout(visibleRangeTimeoutRef.current);
+			}
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!activeSession) return;
+		recordPlanInteraction({
+			kind: "page_view",
+			interaction: "plan_open",
+			activeSection,
+			selectedLines,
+			payload: { liveSessionId: activeSession.session.id },
+			dedupeKey: `open:${activeSession.session.id}`,
+			throttleMs: 60_000,
+		});
+	}, [activeSection, activeSession, recordPlanInteraction, selectedLines]);
+
+	useEffect(() => {
+		if (!activeSession) return;
+		recordPlanInteraction({
+			kind: "page_view",
+			interaction: "view_mode",
+			activeSection,
+			selectedLines,
+			payload: { viewMode },
+			dedupeKey: `view-mode:${activeSession.session.id}:${viewMode}`,
+			throttleMs: 60_000,
+		});
+	}, [activeSection, activeSession, recordPlanInteraction, selectedLines, viewMode]);
 
 	async function handleAddSectionComment(sectionId: string | null) {
 		if (!canComment) {
@@ -368,6 +588,12 @@ export default function PlanDetailPage({
 		setActiveSection(null);
 		setGeneralComposing(false);
 		setHighlightedLines(null);
+		recordPlanInteraction({
+			kind: "selection",
+			interaction: "line_select",
+			selectedLines: range,
+			dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
+		});
 		// Pre-fill suggestion content with selected lines
 		const selected = contentLines.slice(range.start - 1, range.end).join("\n");
 		setSuggestionContent(selected);
@@ -378,9 +604,19 @@ export default function PlanDetailPage({
 		endLine: number | null;
 	}) {
 		if (comment.startLine == null) return;
-		setHighlightedLines({
+		const range = {
 			start: comment.startLine,
 			end: comment.endLine ?? comment.startLine,
+		};
+		setHighlightedLines({
+			start: range.start,
+			end: range.end,
+		});
+		recordPlanInteraction({
+			kind: "highlight",
+			interaction: "comment_highlight",
+			selectedLines: range,
+			dedupeKey: `comment-highlight:${range.start}-${range.end}`,
 		});
 		if (viewMode !== "source") {
 			setViewMode("source");
@@ -404,6 +640,18 @@ export default function PlanDetailPage({
 			data: { planId: plan.id, status: newStatus },
 		});
 		router.invalidate();
+	}
+
+	function handleSectionFocus(sectionId: string | null) {
+		setCommentError(null);
+		setActiveSection(sectionId);
+		recordPlanInteraction({
+			kind: "section_focus",
+			interaction: "section_focus",
+			activeSection: sectionId,
+			selectedLines,
+			dedupeKey: `section:${sectionId ?? "top"}:${viewMode}`,
+		});
 	}
 
 	const statusConfig = STATUS_CONFIG[plan.status];
@@ -561,6 +809,23 @@ export default function PlanDetailPage({
 				</div>
 			</div>
 
+			<SessionWorkspace
+				planId={plan.id}
+				latestRevision={
+					latestRevision
+						? {
+								id: latestRevision.id,
+								revisionNumber: latestRevision.revisionNumber,
+								content: latestRevision.content,
+							}
+						: null
+				}
+				sessions={sessions}
+				snapshots={snapshots}
+				isAuthor={isAuthor}
+				canInteract={canComment}
+			/>
+
 			{/* Edit mode */}
 			{editing ? (
 				<div className="rise-in" style={{ animationDelay: "120ms" }}>
@@ -601,10 +866,7 @@ export default function PlanDetailPage({
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
 													canComment={canComment}
-													onComment={() => {
-														setCommentError(null);
-														setActiveSection(id ?? null);
-													}}
+													onComment={() => handleSectionFocus(id ?? null)}
 												>
 													{children}
 												</SectionHeading>
@@ -617,10 +879,7 @@ export default function PlanDetailPage({
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
 													canComment={canComment}
-													onComment={() => {
-														setCommentError(null);
-														setActiveSection(id ?? null);
-													}}
+													onComment={() => handleSectionFocus(id ?? null)}
 												>
 													{children}
 												</SectionHeading>
@@ -633,10 +892,7 @@ export default function PlanDetailPage({
 														commentsBySection.get(id ?? null)?.length ?? 0
 													}
 													canComment={canComment}
-													onComment={() => {
-														setCommentError(null);
-														setActiveSection(id ?? null);
-													}}
+													onComment={() => handleSectionFocus(id ?? null)}
 												>
 													{children}
 												</SectionHeading>
@@ -728,6 +984,7 @@ export default function PlanDetailPage({
 									selectedLines={selectedLines}
 									commentedLines={lineComments}
 									highlightedLines={highlightedLines}
+									onVisibleRangeChange={handleVisibleRangeChange}
 								/>
 							)}
 						</article>
@@ -1137,10 +1394,33 @@ function BlockCommentWrapper({
 	const select = () =>
 		onLineSelect({ start: startLine, end: endLine ?? startLine });
 
+	const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+		const target = event.target as HTMLElement | null;
+		if (!target) {
+			select();
+			return;
+		}
+
+		if (
+			target.closest(
+				'a, button, input, textarea, select, label, summary, [role="button"], [role="link"]',
+			)
+		) {
+			return;
+		}
+
+		const selection = window.getSelection();
+		if (selection && selection.toString().trim().length > 0) {
+			return;
+		}
+
+		select();
+	};
+
 	return (
 		// biome-ignore lint/a11y/useKeyboardHandler: click-to-comment affordance, not a semantic control
 		<div
-			onClick={select}
+			onClick={handleClick}
 			className="-mx-2 cursor-pointer rounded-lg px-2 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
 		>
 			<Tag {...props}>{children}</Tag>

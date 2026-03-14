@@ -52,6 +52,8 @@ export const getMyPlans = createServerFn({ method: "GET" }).handler(
 export const getPlan = createServerFn({ method: "GET" })
 	.inputValidator(z.object({ planId: z.string() }))
 	.handler(async ({ data }) => {
+		await requireAuth();
+
 		const plan = await getDb(env.planmd_db).query.plans.findFirst({
 			where: eq(plans.id, data.planId),
 		});
@@ -406,6 +408,8 @@ export const addParticipant = createServerFn({ method: "POST" })
 export const getRevision = createServerFn({ method: "GET" })
 	.inputValidator(z.object({ revisionId: z.string() }))
 	.handler(async ({ data }) => {
+		await requireAuth();
+
 		const revision = await getDb(env.planmd_db).query.revisions.findFirst({
 			where: eq(revisions.id, data.revisionId),
 		});
@@ -417,6 +421,8 @@ export const getRevision = createServerFn({ method: "GET" })
 export const getComments = createServerFn({ method: "GET" })
 	.inputValidator(z.object({ revisionId: z.string() }))
 	.handler(async ({ data }) => {
+		await requireAuth();
+
 		return getDb(env.planmd_db)
 			.select()
 			.from(comments)

@@ -1,17 +1,20 @@
 # planmd
 
-Collaborative plan review app for developer teams. Teams submit detailed planning documents in markdown (`plan.md` files), discuss via inline comments, revise based on feedback, reach consensus, and hand off to AI coding agents for implementation.
+Collaborative planning workspace for developer teams. Teams draft detailed planning documents in markdown (`plan.md` files), capture live maintainer-contributor context during calls, discuss via inline comments, publish immutable handoff snapshots, and link coding-agent output back to the plan.
 
-**Workflow:** Write plan → Share for review → Discuss via inline comments → Revise → Reach consensus → Hand off to AI agents
+**Workflow:** Write plan → Capture live session evidence → Discuss via inline comments → Revise → Publish handoff snapshot → Link coding-agent output back
 
 **Live:** [planmd.dev](https://planmd.dev)
 
 ## Features
 
 - **Markdown plan creation** with live preview
+- **Private live sessions** for transcript notes, semantic repo context, and assistant attention items
 - **Section-anchored inline comments** with threading and resolution
 - **Review/approval workflow** with consensus tracking and a visual consensus bar
 - **Revision history** with diff view between versions
+- **Public handoff snapshots** that freeze a revision plus linked session evidence
+- **Bot-friendly handoff API + writeback endpoint** for agent runs, PR links, and suggested plan deltas
 - **Role-based participants** — author, reviewer, observer
 - **Clerk authentication** (with dev bypass mode for local development)
 
@@ -90,10 +93,13 @@ src/
 │   ├── plan/
 │   │   ├── new/                   # /plan/new — create a plan
 │   │   └── $planId/
-│   │       ├── index.tsx          # /plan/:planId — review view
-│   │       ├── -components/       # Inline comments, consensus bar, etc.
-│   │       ├── -api/              # Plan detail server functions
+│   │       ├── index.tsx          # /plan/:planId — private plan workspace
+│   │       ├── -components/       # Review UI, live workspace, comments, etc.
 │   │       └── history/           # /plan/:planId/history — diff view
+│   ├── handoff/
+│   │   └── $publicSlug/           # /handoff/:publicSlug — public immutable handoff
+│   └── api/
+│       └── handoffs/              # Public fetch + agent writeback endpoints
 │   └── sign-in/                   # Clerk sign-in page
 │
 ├── common/                        # Shared across 2+ routes

@@ -201,3 +201,181 @@ export const participants = sqliteTable(
 		uniqueIndex("participants_unique_plan_user").on(table.planId, table.userId),
 	],
 );
+
+// ── Live Sessions ──────────────────────────────────────────────────────────────
+// Private collaboration sessions that collect transcript and semantic repo context
+export const planSessions = sqliteTable("plan_sessions", {
+	id: text("id").primaryKey(),
+	planId: text("plan_id")
+		.notNull()
+		.references(() => plans.id, { onDelete: "cascade" }),
+	status: text("status", {
+		enum: ["live", "ended"],
+	})
+		.notNull()
+		.default("live"),
+	meetingProvider: text("meeting_provider", {
+		enum: ["google_meet", "manual"],
+	})
+		.notNull()
+		.default("google_meet"),
+	title: text("title"),
+	captureToken: text("capture_token").notNull(),
+	createdBy: text("created_by")
+		.notNull()
+		.references(() => users.id),
+	startedAt: integer("started_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+	endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+}, (table) => [
+	uniqueIndex("plan_sessions_capture_token_idx").on(table.captureToken),
+]);
+
+export const transcriptChunks = sqliteTable("transcript_chunks", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id")
+		.notNull()
+		.references(() => planSessions.id, { onDelete: "cascade" }),
+	speakerName: text("speaker_name"),
+	text: text("text").notNull(),
+	occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+	source: text("source", {
+		enum: ["manual_note", "live_caption", "bot"],
+	})
+		.notNull()
+		.default("manual_note"),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+});
+
+export const contextEvents = sqliteTable("context_events", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id")
+		.notNull()
+		.references(() => planSessions.id, { onDelete: "cascade" }),
+	kind: text("kind", {
+		enum: ["page_view", "selection", "highlight", "section_focus", "note"],
+	}).notNull(),
+	pageUrl: text("page_url"),
+	repo: text("repo"),
+	ref: text("ref"),
+	path: text("path"),
+	visibleStartLine: integer("visible_start_line"),
+	visibleEndLine: integer("visible_end_line"),
+	selectedText: text("selected_text"),
+	selectedStartLine: integer("selected_start_line"),
+	selectedEndLine: integer("selected_end_line"),
+	activeSection: text("active_section"),
+	payload: text("payload"),
+	occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+});
+
+export const attentionItems = sqliteTable("attention_items", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id")
+		.notNull()
+		.references(() => planSessions.id, { onDelete: "cascade" }),
+	kind: text("kind", {
+		enum: ["missing_decision", "risk", "contradiction", "follow_up"],
+	}).notNull(),
+	severity: text("severity", {
+		enum: ["low", "medium", "high"],
+	})
+		.notNull()
+		.default("medium"),
+	anchorType: text("anchor_type", {
+		enum: ["section", "line_range", "event", "none"],
+	})
+		.notNull()
+		.default("none"),
+	anchorId: text("anchor_id"),
+	summary: text("summary").notNull(),
+	evidenceRefs: text("evidence_refs"),
+	state: text("state", {
+		enum: ["open", "accepted", "dismissed"],
+	})
+		.notNull()
+		.default("open"),
+	occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+});
+
+// ── Handoff Snapshots ──────────────────────────────────────────────────────────
+// Immutable public contracts derived from a revision plus selected session evidence
+export const handoffSnapshots = sqliteTable(
+	"handoff_snapshots",
+	{
+		id: text("id").primaryKey(),
+		planId: text("plan_id")
+			.notNull()
+			.references(() => plans.id, { onDelete: "cascade" }),
+		revisionId: text("revision_id")
+			.notNull()
+			.references(() => revisions.id, { onDelete: "cascade" }),
+		status: text("status", {
+			enum: ["published"],
+		})
+			.notNull()
+			.default("published"),
+		publicSlug: text("public_slug").notNull(),
+		callbackToken: text("callback_token").notNull(),
+		sessionIds: text("session_ids").notNull(), // JSON array of session IDs
+		markdownContent: text("markdown_content").notNull(),
+		jsonContent: text("json_content").notNull(),
+		publishedAt: integer("published_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => users.id),
+	},
+	(table) => [
+		uniqueIndex("handoff_snapshots_public_slug_idx").on(table.publicSlug),
+		uniqueIndex("handoff_snapshots_callback_token_idx").on(table.callbackToken),
+	],
+);
+
+export const agentRuns = sqliteTable(
+	"agent_runs",
+	{
+		id: text("id").primaryKey(),
+		snapshotId: text("snapshot_id")
+			.notNull()
+			.references(() => handoffSnapshots.id, { onDelete: "cascade" }),
+		agentName: text("agent_name").notNull(),
+		externalRunId: text("external_run_id").notNull(),
+		status: text("status", {
+			enum: ["queued", "running", "completed", "failed", "cancelled"],
+		}).notNull(),
+		prUrl: text("pr_url"),
+		branch: text("branch"),
+		testSummary: text("test_summary"),
+		artifactUrl: text("artifact_url"),
+		suggestedPlanDelta: text("suggested_plan_delta"),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+	},
+	(table) => [
+		uniqueIndex("agent_runs_snapshot_external_idx").on(
+			table.snapshotId,
+			table.externalRunId,
+		),
+	],
+);

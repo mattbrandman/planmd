@@ -1,0 +1,1 @@
+../src/routes/api/sessions/$sessionId/transcript.ts

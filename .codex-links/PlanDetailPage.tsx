@@ -1,0 +1,1 @@
+../src/routes/plan/$planId/-components/PlanDetailPage.tsx

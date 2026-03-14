@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getPlan } from "#/common/api/plans";
+import { authGuard } from "#/common/lib/auth-guard";
 import HistoryPage from "./-components/HistoryPage";
 
 export const Route = createFileRoute("/plan/$planId/history")({
 	head: () => ({
 		meta: [{ title: "Revision History | planmd" }],
 	}),
+	beforeLoad: async () => await authGuard(),
 	loader: async ({ params }) => {
 		const data = await getPlan({ data: { planId: params.planId } });
 		return { plan: data.plan, revisions: data.revisions };
