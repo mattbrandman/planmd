@@ -11,3 +11,10 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+
+# Database files
+*.db
+*.sqlite
+
+# Clerk DNS records (instance-specific)
+clerk-dns.txt

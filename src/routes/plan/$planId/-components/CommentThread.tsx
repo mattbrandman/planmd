@@ -251,7 +251,7 @@ export default function CommentThread({
 							<button
 								type="button"
 								onClick={() => setShowContext(!showContext)}
-								className="inline-flex items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+								className="inline-flex cursor-pointer items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] transition hover:text-[var(--sea-ink)]"
 							>
 								{showContext ? (
 									<ChevronDown className="h-3 w-3" />

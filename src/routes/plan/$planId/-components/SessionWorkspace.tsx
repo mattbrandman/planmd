@@ -503,24 +503,33 @@ export default function SessionWorkspace({
 		}));
 	}
 
+	const [collapsed, setCollapsed] = useState(!activeSession);
+
 	return (
 		<section
-			className="island-shell rise-in mb-6 rounded-2xl p-5"
+			className="island-shell rise-in mb-6 rounded-2xl"
 			style={{ animationDelay: "90ms" }}
 		>
-			<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-				<div>
-					<p className="mb-1 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--lagoon-deep)]">
-						Live Workspace
-					</p>
-					<h2 className="text-xl font-semibold text-[var(--sea-ink)]">
-						Session capture and agent handoff
-					</h2>
-					<p className="mt-1 max-w-3xl text-sm text-[var(--sea-ink-soft)]">
-						Capture maintainer and contributor context privately, turn that
-						evidence into a plan update, and publish immutable handoffs for
-						third-party coding agents.
-					</p>
+			{/* Collapsible header — always visible */}
+			<button
+				type="button"
+				onClick={() => setCollapsed(!collapsed)}
+				className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left transition hover:bg-[var(--surface)]"
+			>
+				<div className="flex items-center gap-3">
+					<ChevronDown
+						className={`h-4 w-4 flex-shrink-0 text-[var(--sea-ink-soft)] transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+					/>
+					<div>
+						<p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--lagoon-deep)]">
+							Live Workspace
+						</p>
+						{collapsed && (
+							<p className="mt-0.5 text-sm text-[var(--sea-ink-soft)]">
+								Session capture and agent handoff
+							</p>
+						)}
+					</div>
 				</div>
 
 				<div className="flex flex-wrap gap-2">
@@ -535,7 +544,11 @@ export default function SessionWorkspace({
 						<Badge variant="outline">No live session</Badge>
 					)}
 				</div>
-			</div>
+			</button>
+
+			{/* Collapsible body */}
+			{!collapsed && (
+			<div className="px-5 pb-5">
 
 			{actionError && (
 				<div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
@@ -656,7 +669,7 @@ export default function SessionWorkspace({
 													key={bundle.session.id}
 													type="button"
 													onClick={() => setFocusedSessionId(bundle.session.id)}
-													className={`block w-full rounded-xl border p-3 text-left transition ${
+													className={`block w-full cursor-pointer rounded-xl border p-3 text-left transition ${
 														isFocused
 															? "border-[var(--lagoon)] bg-white/90 dark:bg-black/20"
 															: "border-[var(--line)] bg-white/70 hover:border-[var(--lagoon)] dark:bg-black/10"
@@ -1379,6 +1392,8 @@ export default function SessionWorkspace({
 					</div>
 				</TabsContent>
 			</Tabs>
+			</div>
+			)}
 		</section>
 	);
 }

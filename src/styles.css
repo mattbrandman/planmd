@@ -302,6 +302,12 @@ pre code {
   margin-inline: auto;
 }
 
+/* Plan detail page — wider to fit content + sidebar comfortably */
+.plan-detail-wrap {
+  width: min(1220px, calc(100% - 2rem));
+  margin-inline: auto;
+}
+
 .display-title {
   font-family: 'Fraunces', Georgia, serif;
 }
@@ -407,6 +413,103 @@ a {
 .site-footer {
   border-top: 1px solid var(--line);
   background: var(--header-bg);
+}
+
+/* ── Plan prose (rendered markdown in plan detail) ──────────────────────────── */
+
+.plan-prose {
+  --tw-prose-body: var(--sea-ink);
+  --tw-prose-headings: var(--sea-ink);
+  --tw-prose-links: var(--lagoon-deep);
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.plan-prose :where(h1, h2, h3) {
+  font-family: 'Fraunces', Georgia, serif;
+  letter-spacing: -0.015em;
+}
+
+.plan-prose :where(h1):first-child {
+  margin-top: 0;
+  font-size: 1.75em;
+}
+
+.plan-prose :where(h2) {
+  margin-top: 2.2em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-prose :where(h3) {
+  color: var(--sea-ink);
+}
+
+.plan-prose :where(blockquote) {
+  border-left-color: var(--lagoon);
+  background: rgba(79, 184, 178, 0.04);
+  border-radius: 0 8px 8px 0;
+  padding: 0.5em 1em;
+}
+
+.dark .plan-prose :where(blockquote) {
+  background: rgba(94, 205, 197, 0.04);
+}
+
+.plan-prose :where(li)::marker {
+  color: var(--lagoon-deep);
+}
+
+.plan-prose :where(strong) {
+  color: var(--sea-ink);
+}
+
+.plan-prose :where(hr) {
+  border-color: var(--line);
+}
+
+/* Content article — subtle accent strip */
+.plan-content-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-content-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--lagoon), var(--lagoon-deep));
+  opacity: 0.6;
+}
+
+/* ── Live session pulse dot ──────────────────────────────────────────────────── */
+
+.live-pulse-dot {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.live-pulse-dot::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.4);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
 /* ── Line-numbered content (source view) ─────────────────────────────────────── */

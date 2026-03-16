@@ -2,6 +2,7 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { SignInButton } from "@clerk/tanstack-react-start";
 import {
 	AlertTriangle,
+	ArrowLeft,
 	Check,
 	CheckCircle2,
 	Clock,
@@ -14,17 +15,23 @@ import {
 	Lightbulb,
 	MessageSquare,
 	Pencil,
+	Radio,
 	Send,
+	Square,
+	X,
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
-import { addContextEvent } from "#/common/api/collaboration";
+import {
+	addContextEvent,
+	createSession,
+	endSession,
+} from "#/common/api/collaboration";
 import { addComment, submitReview, updatePlanStatus } from "#/common/api/plans";
 import { Button } from "#/common/components/ui/button";
-import { Separator } from "#/common/components/ui/separator";
 import { Textarea } from "#/common/components/ui/textarea";
 import CommentThread from "./CommentThread";
 import ConsensusBar from "./ConsensusBar";
@@ -32,7 +39,6 @@ import type { LineRange } from "./LineNumberedContent";
 import LineNumberedContent from "./LineNumberedContent";
 import RevisionEditor from "./RevisionEditor";
 import SectionCommentButton from "./SectionCommentButton";
-import SessionWorkspace from "./SessionWorkspace";
 
 const STATUS_CONFIG = {
 	draft: {
@@ -240,7 +246,6 @@ export default function PlanDetailPage({
 	participants,
 	reviews,
 	sessions,
-	snapshots,
 	comments,
 	currentUser,
 }: PlanDetailProps) {
@@ -264,6 +269,52 @@ export default function PlanDetailPage({
 	const [suggestionContent, setSuggestionContent] = useState("");
 	const [generalComposing, setGeneralComposing] = useState(false);
 	const [commentError, setCommentError] = useState<string | null>(null);
+
+	// Session controls (elevated from SessionWorkspace)
+	const [showStartForm, setShowStartForm] = useState(false);
+	const [sessionTitle, setSessionTitle] = useState("");
+	const [sessionBusy, setSessionBusy] = useState<string | null>(null);
+	const [sessionError, setSessionError] = useState<string | null>(null);
+
+	async function handleStartSession() {
+		if (!canComment || activeSession) return;
+		setSessionBusy("starting");
+		setSessionError(null);
+		try {
+			await createSession({
+				data: {
+					planId: plan.id,
+					title: sessionTitle.trim() || undefined,
+					meetingProvider: "manual",
+				},
+			});
+			setSessionTitle("");
+			setShowStartForm(false);
+			await router.invalidate();
+		} catch (err) {
+			setSessionError(
+				err instanceof Error ? err.message : "Failed to start session",
+			);
+		} finally {
+			setSessionBusy(null);
+		}
+	}
+
+	async function handleEndSession() {
+		if (!activeSession) return;
+		setSessionBusy("ending");
+		setSessionError(null);
+		try {
+			await endSession({ data: { sessionId: activeSession.session.id } });
+			await router.invalidate();
+		} catch (err) {
+			setSessionError(
+				err instanceof Error ? err.message : "Failed to end session",
+			);
+		} finally {
+			setSessionBusy(null);
+		}
+	}
 	const passiveEventRef = useRef<Map<string, { key: string; at: number }>>(
 		new Map(),
 	);
@@ -658,19 +709,30 @@ export default function PlanDetailPage({
 	const StatusIcon = statusConfig.icon;
 
 	return (
-		<main className="page-wrap px-4 pb-12 pt-8">
+		<main className="plan-detail-wrap px-4 pb-12 pt-6">
+			{/* Breadcrumb */}
+			<nav className="rise-in mb-4">
+				<Link
+					to="/"
+					className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--sea-ink-soft)] no-underline transition hover:text-[var(--sea-ink)]"
+				>
+					<ArrowLeft className="h-3.5 w-3.5" />
+					Plans
+				</Link>
+			</nav>
+
 			{/* Plan header */}
-			<header className="rise-in mb-6">
-				<div className="mb-3 flex flex-wrap items-center gap-2">
+			<header className="rise-in mb-8" style={{ animationDelay: "30ms" }}>
+				<div className="mb-4 flex flex-wrap items-center gap-3">
 					<span
 						className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}
 					>
-						<StatusIcon className="h-3 w-3" />
+						<StatusIcon className="h-3.5 w-3.5" />
 						{statusConfig.label}
 					</span>
 
 					<span className="text-xs text-[var(--sea-ink-soft)]">
-						Revision {latestRevision?.revisionNumber ?? 0} of {revisions.length}
+						v{latestRevision?.revisionNumber ?? 0} of {revisions.length}
 					</span>
 
 					{plan.githubUrl && (
@@ -686,79 +748,72 @@ export default function PlanDetailPage({
 					)}
 				</div>
 
-				<h1 className="display-title mb-2 text-3xl font-bold text-[var(--sea-ink)] sm:text-4xl">
+				<h1 className="display-title mb-3 text-4xl font-bold leading-tight text-[var(--sea-ink)] sm:text-5xl">
 					{plan.title}
 				</h1>
 
 				{plan.description && (
-					<p className="text-base text-[var(--sea-ink-soft)]">
+					<p className="max-w-2xl text-lg leading-relaxed text-[var(--sea-ink-soft)]">
 						{plan.description}
 					</p>
 				)}
 			</header>
 
-			{/* Consensus bar + actions */}
+			{/* Compact toolbar — single row */}
 			<div
-				className="island-shell rise-in mb-6 rounded-2xl p-5"
+				className="island-shell rise-in mb-6 rounded-2xl"
 				style={{ animationDelay: "60ms" }}
 			>
-				<ConsensusBar reviewers={reviewers} reviews={reviews} />
+				<div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+					{/* Left: consensus + status actions */}
+					<ConsensusBar reviewers={reviewers} reviews={reviews} />
 
-				<Separator className="my-4" />
-
-				<div className="flex flex-wrap items-center gap-2">
-					{/* Author actions */}
 					{isAuthor && plan.status === "draft" && (
-						<Button
-							variant="outline"
-							size="sm"
+						<button
+							type="button"
 							onClick={() => handleStatusChange("review")}
-							className="rounded-full"
+							className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 						>
-							<MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+							<MessageSquare className="h-3 w-3" />
 							Open for Review
-						</Button>
+						</button>
 					)}
 					{isAuthor && plan.status === "review" && (
-						<Button
-							variant="outline"
-							size="sm"
+						<button
+							type="button"
 							onClick={() => handleStatusChange("approved")}
-							className="rounded-full"
+							className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 						>
-							<CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+							<CheckCircle2 className="h-3 w-3" />
 							Mark Approved
-						</Button>
+						</button>
 					)}
 
-					{/* Reviewer actions */}
 					{!isAuthor &&
 						plan.status === "review" &&
 						reviewers.some((r) => r.userId === currentUser?.id) && (
 							<div className="flex gap-2">
-								<Button
-									variant="outline"
-									size="sm"
+								<button
+									type="button"
 									onClick={() => handleSubmitReview("approved")}
-									className="rounded-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+									className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
 								>
-									<Check className="mr-1.5 h-3.5 w-3.5" />
+									<Check className="h-3 w-3" />
 									Approve
-								</Button>
-								<Button
-									variant="outline"
-									size="sm"
+								</button>
+								<button
+									type="button"
 									onClick={() => handleSubmitReview("changes_requested")}
-									className="rounded-full border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30"
+									className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50/50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-400 dark:hover:bg-amber-950/40"
 								>
-									<AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+									<AlertTriangle className="h-3 w-3" />
 									Request Changes
-								</Button>
+								</button>
 							</div>
 						)}
 
-					<div className="ml-auto flex gap-2">
-						{/* View mode toggle */}
+					{/* Right: view + tools */}
+					<div className="ml-auto flex items-center gap-2">
 						<div className="inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--surface)]">
 							<button
 								type="button"
@@ -766,7 +821,7 @@ export default function PlanDetailPage({
 								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
 									viewMode === "rendered"
 										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-										: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+										: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 								}`}
 							>
 								<FileText className="h-3 w-3" />
@@ -778,7 +833,7 @@ export default function PlanDetailPage({
 								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
 									viewMode === "source"
 										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-										: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+										: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 								}`}
 							>
 								<Code2 className="h-3 w-3" />
@@ -787,44 +842,114 @@ export default function PlanDetailPage({
 						</div>
 
 						{isAuthor && !editing && (
-							<Button
-								variant="outline"
-								size="sm"
+							<button
+								type="button"
 								onClick={() => setEditing(true)}
-								className="rounded-full"
+								className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 							>
-								<Pencil className="mr-1.5 h-3.5 w-3.5" />
+								<Pencil className="h-3 w-3" />
 								Edit
-							</Button>
+							</button>
 						)}
 						<Link
 							to="/plan/$planId/history"
 							params={{ planId: plan.id }}
-							className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] no-underline transition hover:text-[var(--sea-ink)]"
+							className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] no-underline transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 						>
 							<History className="h-3 w-3" />
 							History
 						</Link>
+						<Link
+							to="/plan/$planId/sessions"
+							params={{ planId: plan.id }}
+							className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] no-underline transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
+						>
+							<Radio className="h-3 w-3" />
+							Sessions{sessions.length > 0 && <span className="ml-1 rounded-full bg-[var(--surface-strong)] px-1.5 text-[10px]">{sessions.length}</span>}
+						</Link>
+
+						{canComment && !activeSession && (
+							<button
+								type="button"
+								onClick={() => setShowStartForm(!showStartForm)}
+								className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
+							>
+								<Radio className="h-3 w-3" />
+								Start Session
+							</button>
+						)}
 					</div>
 				</div>
+
+				{/* Inline start session form */}
+				{showStartForm && !activeSession && (
+					<div className="flex items-center gap-3 border-t border-[var(--line)] px-4 py-2.5">
+						<input
+							type="text"
+							value={sessionTitle}
+							onChange={(e) => setSessionTitle(e.target.value)}
+							placeholder="Session title (optional)"
+							className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--sea-ink)] outline-none transition placeholder:text-[var(--sea-ink-soft)] focus:border-[var(--lagoon)]"
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleStartSession();
+								if (e.key === "Escape") setShowStartForm(false);
+							}}
+							autoFocus
+						/>
+						<Button
+							size="sm"
+							variant="brand"
+							onClick={handleStartSession}
+							disabled={sessionBusy === "starting"}
+							className="rounded-full"
+						>
+							{sessionBusy === "starting" ? "Starting..." : "Go Live"}
+						</Button>
+						<button
+							type="button"
+							onClick={() => setShowStartForm(false)}
+							className="cursor-pointer rounded-full p-1 text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+						>
+							<X className="h-4 w-4" />
+						</button>
+					</div>
+				)}
+
+				{sessionError && (
+					<div className="border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+						{sessionError}
+					</div>
+				)}
 			</div>
 
-			<SessionWorkspace
-				planId={plan.id}
-				latestRevision={
-					latestRevision
-						? {
-								id: latestRevision.id,
-								revisionNumber: latestRevision.revisionNumber,
-								content: latestRevision.content,
-							}
-						: null
-				}
-				sessions={sessions}
-				snapshots={snapshots}
-				isAuthor={isAuthor}
-				canInteract={canComment}
-			/>
+			{/* Live session banner */}
+			{activeSession && (
+				<div
+					className="rise-in mb-6 flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20"
+					style={{ animationDelay: "80ms" }}
+				>
+					<span className="live-pulse-dot" />
+					<div className="min-w-0 flex-1">
+						<p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+							Session live
+							{activeSession.session.title && (
+								<span className="ml-2 font-normal text-emerald-700 dark:text-emerald-400">
+									— {activeSession.session.title}
+								</span>
+							)}
+						</p>
+					</div>
+					<button
+						type="button"
+						onClick={handleEndSession}
+						disabled={sessionBusy === "ending"}
+						className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+					>
+						<Square className="h-3 w-3 fill-current" />
+						{sessionBusy === "ending" ? "Ending..." : "End Session"}
+					</button>
+				</div>
+			)}
 
 			{/* Edit mode */}
 			{editing ? (
@@ -846,14 +971,14 @@ export default function PlanDetailPage({
 			) : (
 				<>
 					{/* Main content + comment sidebar */}
-					<div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
 						{/* Content area */}
 						<article
-							className="island-shell rise-in rounded-2xl p-6 sm:p-8"
+							className="island-shell plan-content-card rise-in min-w-0 rounded-2xl p-8 sm:p-10"
 							style={{ animationDelay: "120ms" }}
 						>
 							{viewMode === "rendered" ? (
-								<div className="prose prose-sm max-w-none">
+								<div className="prose prose-neutral max-w-none dark:prose-invert plan-prose">
 									<ReactMarkdown
 										remarkPlugins={[remarkGfm]}
 										rehypePlugins={[rehypeSlug]}
@@ -991,49 +1116,53 @@ export default function PlanDetailPage({
 
 						{/* Comment sidebar */}
 						<aside
-							className="rise-in space-y-4"
+							className="rise-in"
 							style={{ animationDelay: "180ms" }}
 						>
-							{/* Comment count + outdated filter */}
-							{totalTopLevel > 0 && (
-								<div className="flex items-center justify-between px-1">
-									<span className="text-xs text-[var(--sea-ink-soft)]">
-										{totalTopLevel} comment{totalTopLevel !== 1 && "s"}
-										{outdatedCount > 0 && (
-											<span className="text-amber-600 dark:text-amber-400">
-												{" "}
-												({outdatedCount} outdated)
-											</span>
-										)}
-									</span>
-									{outdatedCount > 0 && (
-										<button
-											type="button"
-											onClick={() => setShowOutdated(!showOutdated)}
-											className="inline-flex items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
-										>
-											{showOutdated ? (
-												<>
-													<EyeOff className="h-3 w-3" />
-													Hide outdated
-												</>
-											) : (
-												<>
-													<Eye className="h-3 w-3" />
-													Show outdated
-												</>
+						<div className="sticky top-20 max-h-[calc(100vh-6rem)] space-y-4 overflow-y-auto pr-1">
+							{/* Sidebar header */}
+							<div className="flex items-center justify-between">
+								<h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--sea-ink-soft)]">
+									{totalTopLevel > 0 ? (
+										<>
+											{totalTopLevel} Comment{totalTopLevel !== 1 && "s"}
+											{outdatedCount > 0 && (
+												<span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
+													({outdatedCount} outdated)
+												</span>
 											)}
-										</button>
+										</>
+									) : (
+										"Discussion"
 									)}
-								</div>
-							)}
+								</h3>
+								{outdatedCount > 0 && (
+									<button
+										type="button"
+										onClick={() => setShowOutdated(!showOutdated)}
+										className="cursor-pointer inline-flex items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+									>
+										{showOutdated ? (
+											<>
+												<EyeOff className="h-3 w-3" />
+												Hide outdated
+											</>
+										) : (
+											<>
+												<Eye className="h-3 w-3" />
+												Show outdated
+											</>
+										)}
+									</button>
+								)}
+							</div>
 
 							{/* Add comment button (always visible when not composing) */}
 							{!isComposing && (
 								canComment ? (
 									<Button
 										size="sm"
-										variant="outline"
+										variant="brand"
 										onClick={() => {
 											setCommentError(null);
 											setGeneralComposing(true);
@@ -1126,7 +1255,7 @@ export default function PlanDetailPage({
 											className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
 												composerMode === "comment"
 													? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-													: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+													: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 											}`}
 										>
 											<MessageSquare className="h-3 w-3" />
@@ -1138,7 +1267,7 @@ export default function PlanDetailPage({
 											className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
 												composerMode === "suggest"
 													? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-													: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+													: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 											}`}
 										>
 											<Lightbulb className="h-3 w-3" />
@@ -1315,13 +1444,16 @@ export default function PlanDetailPage({
 
 							{!hasAnyComments && !isComposing && (
 								<div className="island-shell rounded-2xl p-6 text-center">
-									<MessageSquare className="mx-auto mb-2 h-6 w-6 text-[var(--sea-ink-soft)]" />
-									<p className="text-sm text-[var(--sea-ink-soft)]">
-										No comments yet. Use the button above to start a discussion,
-										or switch to Source view to comment on specific lines.
+									<MessageSquare className="mx-auto mb-3 h-8 w-8 text-[var(--line)]" />
+									<p className="mb-1 text-sm font-medium text-[var(--sea-ink)]">
+										No comments yet
+									</p>
+									<p className="text-xs leading-relaxed text-[var(--sea-ink-soft)]">
+										Start a discussion or switch to Source view to comment on specific lines.
 									</p>
 								</div>
 							)}
+						</div>
 						</aside>
 					</div>
 				</>
@@ -1349,7 +1481,7 @@ function SectionHeading({
 }) {
 	const props = {
 		id,
-		className: "group relative",
+		className: "group",
 		children: (
 			<>
 				{children}
@@ -1421,10 +1553,10 @@ function BlockCommentWrapper({
 		// biome-ignore lint/a11y/useKeyboardHandler: click-to-comment affordance, not a semantic control
 		<div
 			onClick={handleClick}
-			className="-mx-2 cursor-pointer rounded-lg px-2 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
+			className="-mx-2 cursor-pointer rounded-lg px-2 pr-10 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
 		>
 			<Tag {...props}>{children}</Tag>
-			<span className="pointer-events-none absolute -right-2 top-1 translate-x-full opacity-0 transition-all group-hover/block:opacity-100">
+			<span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/block:opacity-100">
 				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm">
 					<MessageSquare className="h-3 w-3" />
 				</span>

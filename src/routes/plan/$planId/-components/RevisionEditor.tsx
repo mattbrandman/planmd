@@ -163,7 +163,7 @@ export default function RevisionEditor({
 							className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
 								!preview
 									? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-									: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+									: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 							}`}
 						>
 							<Pencil className="h-3 w-3" />
@@ -175,7 +175,7 @@ export default function RevisionEditor({
 							className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
 								preview
 									? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-									: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
+									: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
 							}`}
 						>
 							<Eye className="h-3 w-3" />

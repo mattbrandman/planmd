@@ -15,6 +15,7 @@ import { Route as PlanNewRouteRouteImport } from './routes/plan/new/route'
 import { Route as HandoffPublicSlugRouteRouteImport } from './routes/handoff/$publicSlug/route'
 import { Route as PlanPlanIdIndexRouteImport } from './routes/plan/$planId/index'
 import { Route as ApiHandoffsSnapshotIdRouteImport } from './routes/api/handoffs/$snapshotId'
+import { Route as PlanPlanIdSessionsRouteRouteImport } from './routes/plan/$planId/sessions/route'
 import { Route as PlanPlanIdHistoryRouteRouteImport } from './routes/plan/$planId/history/route'
 import { Route as ApiSessionsSessionIdTranscriptRouteImport } from './routes/api/sessions/$sessionId/transcript'
 import { Route as ApiSessionsSessionIdContextRouteImport } from './routes/api/sessions/$sessionId/context'
@@ -50,6 +51,11 @@ const ApiHandoffsSnapshotIdRoute = ApiHandoffsSnapshotIdRouteImport.update({
   path: '/api/handoffs/$snapshotId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanPlanIdSessionsRouteRoute = PlanPlanIdSessionsRouteRouteImport.update({
+  id: '/plan/$planId/sessions',
+  path: '/plan/$planId/sessions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlanPlanIdHistoryRouteRoute = PlanPlanIdHistoryRouteRouteImport.update({
   id: '/plan/$planId/history',
   path: '/plan/$planId/history',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
+  '/plan/$planId/sessions': typeof PlanPlanIdSessionsRouteRoute
   '/api/handoffs/$snapshotId': typeof ApiHandoffsSnapshotIdRouteWithChildren
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
+  '/plan/$planId/sessions': typeof PlanPlanIdSessionsRouteRoute
   '/api/handoffs/$snapshotId': typeof ApiHandoffsSnapshotIdRouteWithChildren
   '/plan/$planId': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/plan/new': typeof PlanNewRouteRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/plan/$planId/history': typeof PlanPlanIdHistoryRouteRoute
+  '/plan/$planId/sessions': typeof PlanPlanIdSessionsRouteRoute
   '/api/handoffs/$snapshotId': typeof ApiHandoffsSnapshotIdRouteWithChildren
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
+    | '/plan/$planId/sessions'
     | '/api/handoffs/$snapshotId'
     | '/plan/$planId/'
     | '/api/handoffs/$snapshotId/agent-runs'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
+    | '/plan/$planId/sessions'
     | '/api/handoffs/$snapshotId'
     | '/plan/$planId'
     | '/api/handoffs/$snapshotId/agent-runs'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/plan/new'
     | '/sign-in/$'
     | '/plan/$planId/history'
+    | '/plan/$planId/sessions'
     | '/api/handoffs/$snapshotId'
     | '/plan/$planId/'
     | '/api/handoffs/$snapshotId/agent-runs'
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   PlanNewRouteRoute: typeof PlanNewRouteRoute
   SignInSplatRoute: typeof SignInSplatRoute
   PlanPlanIdHistoryRouteRoute: typeof PlanPlanIdHistoryRouteRoute
+  PlanPlanIdSessionsRouteRoute: typeof PlanPlanIdSessionsRouteRoute
   ApiHandoffsSnapshotIdRoute: typeof ApiHandoffsSnapshotIdRouteWithChildren
   PlanPlanIdIndexRoute: typeof PlanPlanIdIndexRoute
   ApiSessionsSessionIdContextRoute: typeof ApiSessionsSessionIdContextRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       path: '/api/handoffs/$snapshotId'
       fullPath: '/api/handoffs/$snapshotId'
       preLoaderRoute: typeof ApiHandoffsSnapshotIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plan/$planId/sessions': {
+      id: '/plan/$planId/sessions'
+      path: '/plan/$planId/sessions'
+      fullPath: '/plan/$planId/sessions'
+      preLoaderRoute: typeof PlanPlanIdSessionsRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/plan/$planId/history': {
@@ -256,6 +276,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlanNewRouteRoute: PlanNewRouteRoute,
   SignInSplatRoute: SignInSplatRoute,
   PlanPlanIdHistoryRouteRoute: PlanPlanIdHistoryRouteRoute,
+  PlanPlanIdSessionsRouteRoute: PlanPlanIdSessionsRouteRoute,
   ApiHandoffsSnapshotIdRoute: ApiHandoffsSnapshotIdRouteWithChildren,
   PlanPlanIdIndexRoute: PlanPlanIdIndexRoute,
   ApiSessionsSessionIdContextRoute: ApiSessionsSessionIdContextRoute,
