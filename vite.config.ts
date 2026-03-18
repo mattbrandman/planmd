@@ -9,6 +9,9 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 const config = defineConfig({
+	server: {
+		allowedHosts: ["matts-macbook-pro.tail5124b.ts.net"],
+	},
 	plugins: [
 		devtools(),
 		cloudflare({ viteEnvironment: { name: "ssr" } }),

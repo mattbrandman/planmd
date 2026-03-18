@@ -12,5 +12,9 @@
 		"default_popup": "popup.html",
 		"default_title": "planmd Transcription"
 	},
+	"web_accessible_resources": [{
+		"resources": ["mic-permission.html", "mic-permission.js"],
+		"matches": ["https://meet.google.com/*"]
+	}],
 	"minimum_chrome_version": "116"
 }

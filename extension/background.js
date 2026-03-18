@@ -67,6 +67,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 });
 
+// ─── Mic Permission ─────────────────────────────────────────────────────────
+
+/**
+ * Ensure mic permission is granted (first time only).
+ *
+ * Injects a 0x0 iframe into the active tab (same pattern as Loom/Fireflies).
+ * The iframe loads mic-permission.html (a web_accessible_resource) which
+ * immediately calls getUserMedia() — Chrome shows its native permission
+ * prompt anchored to the current page. Once granted, permission persists
+ * and this function becomes a no-op.
+ */
+async function ensureMicPermission(tabId) {
+	// Check if already granted
+	try {
+		const status = await navigator.permissions.query({ name: "microphone" });
+		if (status.state === "granted") return true;
+	} catch {
+		// permissions.query may not be available in service worker
+	}
+
+	// Inject a 0x0 iframe into the current tab (like Loom's permissionsCheck)
+	console.log("[planmd] Requesting mic permission...");
+	await chrome.scripting.executeScript({
+		target: { tabId },
+		func: (extensionId) => {
+			if (document.getElementById("planmd-mic-check")) return;
+			const iframe = document.createElement("iframe");
+			iframe.id = "planmd-mic-check";
+			iframe.allow = "microphone";
+			iframe.src = `chrome-extension://${extensionId}/mic-permission.html`;
+			iframe.title = "Permissions Check";
+			Object.assign(iframe.style, {
+				width: "0",
+				height: "0",
+				border: "none",
+				position: "fixed",
+				top: "0",
+				right: "0",
+				overflow: "hidden",
+			});
+			document.body.appendChild(iframe);
+		},
+		args: [chrome.runtime.id],
+	});
+
+	return new Promise((resolve) => {
+		const timeout = setTimeout(() => {
+			chrome.runtime.onMessage.removeListener(listener);
+			removePermissionIframe(tabId);
+			console.warn("[planmd] Mic permission request timed out.");
+			resolve(false);
+		}, 30000);
+
+		const listener = (msg) => {
+			if (msg.type === "mic-permission-granted" || msg.type === "mic-permission-denied") {
+				chrome.runtime.onMessage.removeListener(listener);
+				clearTimeout(timeout);
+				console.log(`[planmd] Mic permission ${msg.type === "mic-permission-granted" ? "granted" : "denied"}.`);
+				removePermissionIframe(tabId);
+				resolve(msg.type === "mic-permission-granted");
+			}
+		};
+		chrome.runtime.onMessage.addListener(listener);
+	});
+}
+
+function removePermissionIframe(tabId) {
+	chrome.scripting.executeScript({
+		target: { tabId },
+		func: () => document.getElementById("planmd-mic-check")?.remove(),
+	}).catch(() => {});
+}
+
 // ─── Start Capture ───────────────────────────────────────────────────────────
 
 /**
@@ -74,9 +147,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  *
  * Flow:
  * 1. Get the active tab ID
- * 2. Call chrome.tabCapture.getMediaStreamId() to get a stream ID
- * 3. Create/ensure offscreen document exists
- * 4. Send the stream ID + API config to the offscreen document
+ * 2. Ensure mic permission (0x0 iframe, first time only)
+ * 3. Call chrome.tabCapture.getMediaStreamId() to get a stream ID
+ * 4. Create/ensure offscreen document exists
+ * 5. Send the stream ID + API config to the offscreen document
  */
 async function handleStartCapture({ sessionId, captureToken, apiBaseUrl }) {
 	try {
@@ -99,12 +173,18 @@ async function handleStartCapture({ sessionId, captureToken, apiBaseUrl }) {
 			return { success: false, error: "No active tab found." };
 		}
 
-		// 2. Create offscreen document first and wait for it to be ready
+		// 2. Ensure mic permission (0x0 iframe on first use, then no-op)
+		const micGranted = await ensureMicPermission(activeTab.id);
+		if (!micGranted) {
+			console.warn("[planmd] Proceeding without mic — tab audio only.");
+		}
+
+		// 3. Create offscreen document first and wait for it to be ready
 		//    (must exist before we get the stream ID, so it can consume it)
 		await ensureOffscreenDocument();
 		await waitForOffscreenReady();
 
-		// 3. Get a media stream ID for the tab's audio
+		// 4. Get a media stream ID for the tab's audio
 		//    The offscreen document will consume this via getUserMedia
 		const streamId = await new Promise((resolve, reject) => {
 			chrome.tabCapture.getMediaStreamId(
@@ -126,7 +206,7 @@ async function handleStartCapture({ sessionId, captureToken, apiBaseUrl }) {
 			};
 		}
 
-		// 4. Send configuration to the offscreen document immediately
+		// 5. Send configuration to the offscreen document immediately
 		//    (stream ID expires quickly, so don't delay)
 		await chrome.runtime.sendMessage({
 			type: "start-recording",
@@ -137,7 +217,7 @@ async function handleStartCapture({ sessionId, captureToken, apiBaseUrl }) {
 			apiBaseUrl,
 		});
 
-		// 5. Update state
+		// 6. Update state
 		captureState = {
 			active: true,
 			tabId: activeTab.id,
