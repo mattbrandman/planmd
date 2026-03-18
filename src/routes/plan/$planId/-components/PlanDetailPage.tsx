@@ -1,5 +1,5 @@
-import { Link, useRouter } from "@tanstack/react-router";
 import { SignInButton } from "@clerk/tanstack-react-start";
+import { Link, useRouter } from "@tanstack/react-router";
 import {
 	AlertTriangle,
 	ArrowLeft,
@@ -13,10 +13,12 @@ import {
 	FileText,
 	History,
 	Lightbulb,
+	Loader2,
 	MessageSquare,
 	Pencil,
 	Radio,
 	Send,
+	Sparkles,
 	Square,
 	X,
 } from "lucide-react";
@@ -29,6 +31,9 @@ import {
 	addContextEvent,
 	createSession,
 	endSession,
+	getRegenerationRequests,
+	triggerRegeneration,
+	updateRegeneration,
 } from "#/common/api/collaboration";
 import { addComment, submitReview, updatePlanStatus } from "#/common/api/plans";
 import { Button } from "#/common/components/ui/button";
@@ -39,6 +44,7 @@ import type { LineRange } from "./LineNumberedContent";
 import LineNumberedContent from "./LineNumberedContent";
 import RevisionEditor from "./RevisionEditor";
 import SectionCommentButton from "./SectionCommentButton";
+import SuggestionDiff from "./SuggestionDiff";
 
 const STATUS_CONFIG = {
 	draft: {
@@ -270,6 +276,14 @@ export default function PlanDetailPage({
 	const [generalComposing, setGeneralComposing] = useState(false);
 	const [commentError, setCommentError] = useState<string | null>(null);
 
+	// Regeneration request polling
+	type RegenRequest = Awaited<
+		ReturnType<typeof getRegenerationRequests>
+	>["requests"][number];
+	const [regenRequests, setRegenRequests] = useState<RegenRequest[]>([]);
+	const [regenBusy, setRegenBusy] = useState<string | null>(null);
+	const triggeredRequestsRef = useRef<Set<string>>(new Set());
+
 	// Session controls (elevated from SessionWorkspace)
 	const [showStartForm, setShowStartForm] = useState(false);
 	const [sessionTitle, setSessionTitle] = useState("");
@@ -319,6 +333,7 @@ export default function PlanDetailPage({
 		new Map(),
 	);
 	const visibleRangeTimeoutRef = useRef<number | null>(null);
+	const renderedProseRef = useRef<HTMLDivElement>(null);
 
 	const content = latestRevision?.content ?? "";
 	const contentLines = useMemo(() => content.split("\n"), [content]);
@@ -420,6 +435,7 @@ export default function PlanDetailPage({
 				| "comment_highlight"
 				| "section_focus";
 			selectedLines?: LineRange | null;
+			selectedText?: string | null;
 			visibleLines?: LineRange | null;
 			activeSection?: string | null;
 			payload?: Record<string, unknown>;
@@ -449,7 +465,10 @@ export default function PlanDetailPage({
 				return;
 			}
 
-			passiveEventRef.current.set(args.kind, { key: dedupeKey, at: occurredAt });
+			passiveEventRef.current.set(args.kind, {
+				key: dedupeKey,
+				at: occurredAt,
+			});
 
 			void addContextEvent({
 				data: {
@@ -459,6 +478,9 @@ export default function PlanDetailPage({
 					path: `plans/${plan.id}`,
 					visibleStartLine: args.visibleLines?.start ?? null,
 					visibleEndLine: args.visibleLines?.end ?? null,
+					selectedText: args.selectedText
+						? args.selectedText.slice(0, 5000)
+						: null,
 					selectedStartLine: args.selectedLines?.start ?? null,
 					selectedEndLine: args.selectedLines?.end ?? null,
 					activeSection: args.activeSection ?? null,
@@ -474,7 +496,13 @@ export default function PlanDetailPage({
 				},
 			}).catch(() => undefined);
 		},
-		[activeSession, latestRevision?.id, latestRevision?.revisionNumber, plan.id, viewMode],
+		[
+			activeSession,
+			latestRevision?.id,
+			latestRevision?.revisionNumber,
+			plan.id,
+			viewMode,
+		],
 	);
 
 	const handleVisibleRangeChange = useCallback(
@@ -530,7 +558,124 @@ export default function PlanDetailPage({
 			dedupeKey: `view-mode:${activeSession.session.id}:${viewMode}`,
 			throttleMs: 60_000,
 		});
-	}, [activeSection, activeSession, recordPlanInteraction, selectedLines, viewMode]);
+	}, [
+		activeSection,
+		activeSession,
+		recordPlanInteraction,
+		selectedLines,
+		viewMode,
+	]);
+
+	// ── Rendered mode: capture text selections as context events ──────────────
+	useEffect(() => {
+		const container = renderedProseRef.current;
+		if (!container || !activeSession) return;
+
+		const handleMouseUp = () => {
+			const selection = window.getSelection();
+			if (!selection || selection.isCollapsed) return;
+
+			const selText = selection.toString().trim();
+			if (!selText) return;
+
+			// Walk up to find the nearest BlockCommentWrapper's data or the prose node position
+			// We can get line info from the closest [data-line] or block wrapper — but in rendered
+			// mode we don't have data-line attributes. Instead, just record the text as a selection event.
+			recordPlanInteraction({
+				kind: "selection",
+				interaction: "line_select",
+				selectedText: selText,
+				dedupeKey: `rendered-select:${selText.slice(0, 80)}`,
+			});
+		};
+
+		container.addEventListener("mouseup", handleMouseUp);
+		return () => container.removeEventListener("mouseup", handleMouseUp);
+	}, [activeSession, recordPlanInteraction]);
+
+	// ── Regeneration request polling ───────────────────────────────────────────
+	useEffect(() => {
+		if (!activeSession) {
+			setRegenRequests([]);
+			triggeredRequestsRef.current.clear();
+			return;
+		}
+
+		let cancelled = false;
+
+		async function poll() {
+			if (cancelled || !activeSession) return;
+			try {
+				const result = await getRegenerationRequests({
+					data: { sessionId: activeSession.session.id },
+				});
+				if (cancelled) return;
+				setRegenRequests(result.requests);
+
+				// Auto-trigger regeneration for "detected" requests
+				for (const req of result.requests) {
+					if (
+						req.status === "detected" &&
+						!triggeredRequestsRef.current.has(req.id)
+					) {
+						triggeredRequestsRef.current.add(req.id);
+						void triggerRegeneration({
+							data: {
+								sessionId: activeSession.session.id,
+								requestId: req.id,
+							},
+						}).catch(() => {
+							// Remove from triggered set so it can retry
+							triggeredRequestsRef.current.delete(req.id);
+						});
+					}
+				}
+			} catch {
+				// Silently ignore polling errors
+			}
+		}
+
+		void poll();
+		const intervalId = window.setInterval(poll, 5_000);
+		return () => {
+			cancelled = true;
+			window.clearInterval(intervalId);
+		};
+	}, [activeSession]);
+
+	async function handleAcceptRegeneration(requestId: string) {
+		setRegenBusy(requestId);
+		try {
+			await updateRegeneration({
+				data: { requestId, action: "accepted" },
+			});
+			setRegenRequests((prev) => prev.filter((r) => r.id !== requestId));
+			router.invalidate();
+		} catch {
+			// ignore
+		} finally {
+			setRegenBusy(null);
+		}
+	}
+
+	async function handleDismissRegeneration(requestId: string) {
+		setRegenBusy(requestId);
+		try {
+			await updateRegeneration({
+				data: { requestId, action: "dismissed" },
+			});
+			setRegenRequests((prev) => prev.filter((r) => r.id !== requestId));
+		} catch {
+			// ignore
+		} finally {
+			setRegenBusy(null);
+		}
+	}
+
+	const readyRegenRequests = regenRequests.filter((r) => r.status === "ready");
+	const pendingRegenRequests = regenRequests.filter(
+		(r) => r.status === "detected" || r.status === "generating",
+	);
 
 	async function handleAddSectionComment(sectionId: string | null) {
 		if (!canComment) {
@@ -632,22 +777,27 @@ export default function PlanDetailPage({
 		}
 	}
 
-	function handleLineSelect(range: LineRange) {
+	function handleLineSelect(range: LineRange, selectedText?: string) {
 		if (!canComment) return;
 		setCommentError(null);
 		setSelectedLines(range);
 		setActiveSection(null);
 		setGeneralComposing(false);
 		setHighlightedLines(null);
+		// Use provided selectedText or extract from contentLines as fallback
+		const text =
+			selectedText || contentLines.slice(range.start - 1, range.end).join("\n");
 		recordPlanInteraction({
 			kind: "selection",
 			interaction: "line_select",
 			selectedLines: range,
+			selectedText: text,
 			dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
 		});
 		// Pre-fill suggestion content with selected lines
-		const selected = contentLines.slice(range.start - 1, range.end).join("\n");
-		setSuggestionContent(selected);
+		setSuggestionContent(
+			contentLines.slice(range.start - 1, range.end).join("\n"),
+		);
 	}
 
 	function handleCommentLineClick(comment: {
@@ -663,10 +813,12 @@ export default function PlanDetailPage({
 			start: range.start,
 			end: range.end,
 		});
+		const text = contentLines.slice(range.start - 1, range.end).join("\n");
 		recordPlanInteraction({
 			kind: "highlight",
 			interaction: "comment_highlight",
 			selectedLines: range,
+			selectedText: text,
 			dedupeKey: `comment-highlight:${range.start}-${range.end}`,
 		});
 		if (viewMode !== "source") {
@@ -865,7 +1017,12 @@ export default function PlanDetailPage({
 							className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] no-underline transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 						>
 							<Radio className="h-3 w-3" />
-							Sessions{sessions.length > 0 && <span className="ml-1 rounded-full bg-[var(--surface-strong)] px-1.5 text-[10px]">{sessions.length}</span>}
+							Sessions
+							{sessions.length > 0 && (
+								<span className="ml-1 rounded-full bg-[var(--surface-strong)] px-1.5 text-[10px]">
+									{sessions.length}
+								</span>
+							)}
 						</Link>
 
 						{canComment && !activeSession && (
@@ -925,29 +1082,47 @@ export default function PlanDetailPage({
 			{/* Live session banner */}
 			{activeSession && (
 				<div
-					className="rise-in mb-6 flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20"
+					className="rise-in mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20"
 					style={{ animationDelay: "80ms" }}
 				>
-					<span className="live-pulse-dot" />
-					<div className="min-w-0 flex-1">
-						<p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-							Session live
-							{activeSession.session.title && (
-								<span className="ml-2 font-normal text-emerald-700 dark:text-emerald-400">
-									— {activeSession.session.title}
-								</span>
-							)}
-						</p>
+					<div className="flex items-center gap-4">
+						<span className="live-pulse-dot" />
+						<div className="min-w-0 flex-1">
+							<p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+								Session live
+								{activeSession.session.title && (
+									<span className="ml-2 font-normal text-emerald-700 dark:text-emerald-400">
+										— {activeSession.session.title}
+									</span>
+								)}
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={handleEndSession}
+							disabled={sessionBusy === "ending"}
+							className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+						>
+							<Square className="h-3 w-3 fill-current" />
+							{sessionBusy === "ending" ? "Ending..." : "End Session"}
+						</button>
 					</div>
-					<button
-						type="button"
-						onClick={handleEndSession}
-						disabled={sessionBusy === "ending"}
-						className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
-					>
-						<Square className="h-3 w-3 fill-current" />
-						{sessionBusy === "ending" ? "Ending..." : "End Session"}
-					</button>
+					<div className="mt-2 flex items-center gap-3 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/30">
+						<code
+							className="cursor-pointer select-all rounded bg-emerald-100/80 px-2 py-0.5 text-[11px] text-emerald-700 transition hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+							title="Click to select — paste into extension as sessionId:token"
+							onClick={() =>
+								navigator.clipboard.writeText(
+									`${activeSession.session.id}:${activeSession.session.captureToken}`,
+								)
+							}
+						>
+							{activeSession.session.id}:{activeSession.session.captureToken}
+						</code>
+						<span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/50">
+							click to copy
+						</span>
+					</div>
 				</div>
 			)}
 
@@ -978,7 +1153,10 @@ export default function PlanDetailPage({
 							style={{ animationDelay: "120ms" }}
 						>
 							{viewMode === "rendered" ? (
-								<div className="prose prose-neutral max-w-none dark:prose-invert plan-prose">
+								<div
+									ref={renderedProseRef}
+									className="prose prose-neutral max-w-none dark:prose-invert plan-prose"
+								>
 									<ReactMarkdown
 										remarkPlugins={[remarkGfm]}
 										rehypePlugins={[rehypeSlug]}
@@ -1115,345 +1293,406 @@ export default function PlanDetailPage({
 						</article>
 
 						{/* Comment sidebar */}
-						<aside
-							className="rise-in"
-							style={{ animationDelay: "180ms" }}
-						>
-						<div className="sticky top-20 max-h-[calc(100vh-6rem)] space-y-4 overflow-y-auto pr-1">
-							{/* Sidebar header */}
-							<div className="flex items-center justify-between">
-								<h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--sea-ink-soft)]">
-									{totalTopLevel > 0 ? (
-										<>
-											{totalTopLevel} Comment{totalTopLevel !== 1 && "s"}
-											{outdatedCount > 0 && (
-												<span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
-													({outdatedCount} outdated)
-												</span>
-											)}
-										</>
-									) : (
-										"Discussion"
-									)}
-								</h3>
-								{outdatedCount > 0 && (
-									<button
-										type="button"
-										onClick={() => setShowOutdated(!showOutdated)}
-										className="cursor-pointer inline-flex items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
-									>
-										{showOutdated ? (
+						<aside className="rise-in" style={{ animationDelay: "180ms" }}>
+							<div className="sticky top-20 max-h-[calc(100vh-6rem)] space-y-4 overflow-y-auto pr-1">
+								{/* Sidebar header */}
+								<div className="flex items-center justify-between">
+									<h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--sea-ink-soft)]">
+										{totalTopLevel > 0 ? (
 											<>
-												<EyeOff className="h-3 w-3" />
-												Hide outdated
+												{totalTopLevel} Comment{totalTopLevel !== 1 && "s"}
+												{outdatedCount > 0 && (
+													<span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
+														({outdatedCount} outdated)
+													</span>
+												)}
 											</>
 										) : (
-											<>
-												<Eye className="h-3 w-3" />
-												Show outdated
-											</>
+											"Discussion"
 										)}
-									</button>
-								)}
-							</div>
-
-							{/* Add comment button (always visible when not composing) */}
-							{!isComposing && (
-								canComment ? (
-									<Button
-										size="sm"
-										variant="brand"
-										onClick={() => {
-											setCommentError(null);
-											setGeneralComposing(true);
-											setSelectedLines(null);
-											setActiveSection(null);
-										}}
-										className="w-full rounded-full"
-									>
-										<MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-										Add Comment
-									</Button>
-								) : (
-									<SignInButton mode="redirect">
-										<button
-											type="button"
-											className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
-										>
-											<MessageSquare className="h-3.5 w-3.5" />
-											Sign In to Comment
-										</button>
-									</SignInButton>
-								)
-							)}
-
-							{commentError && (
-								<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-									{commentError}
-								</div>
-							)}
-
-							{/* General comment composer */}
-							{generalComposing && (
-								<div className="island-shell rounded-2xl p-4">
-									<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
-										New Comment
 									</h3>
-									<Textarea
-										value={commentDraft}
-										onChange={(e) => setCommentDraft(e.target.value)}
-										placeholder="Share your thoughts on this plan..."
-										rows={3}
-										className="mb-2 resize-none rounded-xl text-sm"
-										autoFocus
-									/>
-									<div className="flex gap-2">
-										<Button
-											size="sm"
-											variant="brand"
-											onClick={handleAddGeneralComment}
-											disabled={!commentDraft.trim() || submittingComment}
-											className="rounded-full"
-										>
-											<Send className="mr-1.5 h-3 w-3" />
-											{submittingComment ? "Posting..." : "Comment"}
-										</Button>
-										<Button
-											size="sm"
-											variant="ghost"
-											onClick={() => {
-												setGeneralComposing(false);
-												setCommentDraft("");
-											}}
-											className="rounded-full"
-										>
-											Cancel
-										</Button>
-									</div>
-								</div>
-							)}
-
-							{/* Line-level comment composer */}
-							{selectedLines !== null && (
-								<div className="island-shell rounded-2xl p-4">
-									<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
-										{composerMode === "suggest"
-											? "Suggest change on"
-											: "Comment on"}{" "}
-										<span className="line-badge">
-											{selectedLines.start === selectedLines.end
-												? `L${selectedLines.start}`
-												: `L${selectedLines.start}-${selectedLines.end}`}
-										</span>
-									</h3>
-
-									{/* Comment / Suggest toggle */}
-									<div className="mb-2 flex gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5">
+									{outdatedCount > 0 && (
 										<button
 											type="button"
-											onClick={() => setComposerMode("comment")}
-											className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-												composerMode === "comment"
-													? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-													: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-											}`}
+											onClick={() => setShowOutdated(!showOutdated)}
+											className="cursor-pointer inline-flex items-center gap-1 text-[10px] text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
 										>
-											<MessageSquare className="h-3 w-3" />
-											Comment
+											{showOutdated ? (
+												<>
+													<EyeOff className="h-3 w-3" />
+													Hide outdated
+												</>
+											) : (
+												<>
+													<Eye className="h-3 w-3" />
+													Show outdated
+												</>
+											)}
 										</button>
-										<button
-											type="button"
-											onClick={() => setComposerMode("suggest")}
-											className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-												composerMode === "suggest"
-													? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-													: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-											}`}
-										>
-											<Lightbulb className="h-3 w-3" />
-											Suggest
-										</button>
-									</div>
-
-									{/* Suggestion editor */}
-									{composerMode === "suggest" && (
-										<div className="mb-2">
-											<label
-												htmlFor="suggestion-content"
-												className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[var(--sea-ink-soft)]"
-											>
-												Proposed change
-											</label>
-											<Textarea
-												id="suggestion-content"
-												value={suggestionContent}
-												onChange={(e) => setSuggestionContent(e.target.value)}
-												rows={4}
-												className="resize-y rounded-xl border-[var(--line)] bg-[var(--surface)] font-mono text-xs"
-											/>
-										</div>
 									)}
+								</div>
 
-									<Textarea
-										value={commentDraft}
-										onChange={(e) => setCommentDraft(e.target.value)}
-										placeholder={
-											composerMode === "suggest"
-												? "Explain your suggestion..."
-												: "Share your thoughts on these lines..."
-										}
-										rows={3}
-										className="mb-2 resize-none rounded-xl text-sm"
-										autoFocus
-									/>
-									<div className="flex gap-2">
+								{/* Add comment button (always visible when not composing) */}
+								{!isComposing &&
+									(canComment ? (
 										<Button
 											size="sm"
 											variant="brand"
-											onClick={handleAddLineComment}
-											disabled={!commentDraft.trim() || submittingComment}
-											className="rounded-full"
-										>
-											<Send className="mr-1.5 h-3 w-3" />
-											{submittingComment
-												? "Posting..."
-												: composerMode === "suggest"
-													? "Suggest"
-													: "Comment"}
-										</Button>
-										<Button
-											size="sm"
-											variant="ghost"
 											onClick={() => {
+												setCommentError(null);
+												setGeneralComposing(true);
 												setSelectedLines(null);
-												setCommentDraft("");
-												setSuggestionContent("");
-												setComposerMode("comment");
-											}}
-											className="rounded-full"
-										>
-											Cancel
-										</Button>
-									</div>
-								</div>
-							)}
-
-							{/* Section-level comment composer */}
-							{activeSection !== null && (
-								<div className="island-shell rounded-2xl p-4">
-									<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
-										Comment on{" "}
-										<span className="font-mono text-[var(--lagoon-deep)]">
-											#{activeSection || "top"}
-										</span>
-									</h3>
-									<Textarea
-										value={commentDraft}
-										onChange={(e) => setCommentDraft(e.target.value)}
-										placeholder="Share your thoughts on this section..."
-										rows={3}
-										className="mb-2 resize-none rounded-xl text-sm"
-										autoFocus
-									/>
-									<div className="flex gap-2">
-										<Button
-											size="sm"
-											variant="brand"
-											onClick={() => handleAddSectionComment(activeSection)}
-											disabled={!commentDraft.trim() || submittingComment}
-											className="rounded-full"
-										>
-											<Send className="mr-1.5 h-3 w-3" />
-											{submittingComment ? "Posting..." : "Comment"}
-										</Button>
-										<Button
-											size="sm"
-											variant="ghost"
-											onClick={() => {
 												setActiveSection(null);
-												setCommentDraft("");
 											}}
-											className="rounded-full"
+											className="w-full rounded-full"
 										>
-											Cancel
+											<MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+											Add Comment
 										</Button>
-									</div>
-								</div>
-							)}
-
-							{/* Line-level comments */}
-							{lineCommentGroups.length > 0 && (
-								<div className="space-y-2">
-									<h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--sea-ink-soft)]">
-										Line Comments
-									</h4>
-									{lineCommentGroups.map((comment) => (
-										<div key={comment.id}>
+									) : (
+										<SignInButton mode="redirect">
 											<button
 												type="button"
-												className="line-badge mb-1 cursor-pointer transition hover:bg-[rgba(79,184,178,0.2)]"
-												onClick={() => handleCommentLineClick(comment)}
+												className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--sea-ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--sea-ink)]"
 											>
-												{comment.startLine != null &&
-												comment.endLine != null &&
-												comment.endLine !== comment.startLine
-													? `L${comment.startLine}-${comment.endLine}`
-													: `L${comment.startLine}`}
+												<MessageSquare className="h-3.5 w-3.5" />
+												Sign In to Comment
 											</button>
-											<CommentThread
-												comment={comment}
-												replies={getReplies(comment.id)}
-												planId={plan.id}
-												revisionId={latestRevision?.id ?? ""}
-												isAuthor={isAuthor}
-												canInteract={canComment}
-												targetLines={getTargetLines(comment)}
-												originalRevisionNumber={getOriginalRevisionNumber(
-													comment,
-												)}
-											/>
-										</div>
+										</SignInButton>
 									))}
-								</div>
-							)}
 
-							{/* Section-level comments */}
-							{Array.from(commentsBySection.entries()).map(
-								([sectionId, sectionCmts]) => (
-									<div key={sectionId ?? "top"} className="space-y-2">
-										<h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--sea-ink-soft)]">
-											{sectionId ? `# ${sectionId}` : "General"}
-										</h4>
-										{sectionCmts.map((comment) => (
-											<CommentThread
-												key={comment.id}
-												comment={comment}
-												replies={getReplies(comment.id)}
-												planId={plan.id}
-												revisionId={latestRevision?.id ?? ""}
-												isAuthor={isAuthor}
-												canInteract={canComment}
-												originalRevisionNumber={getOriginalRevisionNumber(
-													comment,
-												)}
+								{commentError && (
+									<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+										{commentError}
+									</div>
+								)}
+
+								{/* General comment composer */}
+								{generalComposing && (
+									<div className="island-shell rounded-2xl p-4">
+										<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
+											New Comment
+										</h3>
+										<Textarea
+											value={commentDraft}
+											onChange={(e) => setCommentDraft(e.target.value)}
+											placeholder="Share your thoughts on this plan..."
+											rows={3}
+											className="mb-2 resize-none rounded-xl text-sm"
+											autoFocus
+										/>
+										<div className="flex gap-2">
+											<Button
+												size="sm"
+												variant="brand"
+												onClick={handleAddGeneralComment}
+												disabled={!commentDraft.trim() || submittingComment}
+												className="rounded-full"
+											>
+												<Send className="mr-1.5 h-3 w-3" />
+												{submittingComment ? "Posting..." : "Comment"}
+											</Button>
+											<Button
+												size="sm"
+												variant="ghost"
+												onClick={() => {
+													setGeneralComposing(false);
+													setCommentDraft("");
+												}}
+												className="rounded-full"
+											>
+												Cancel
+											</Button>
+										</div>
+									</div>
+								)}
+
+								{/* Line-level comment composer */}
+								{selectedLines !== null && (
+									<div className="island-shell rounded-2xl p-4">
+										<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
+											{composerMode === "suggest"
+												? "Suggest change on"
+												: "Comment on"}{" "}
+											<span className="line-badge">
+												{selectedLines.start === selectedLines.end
+													? `L${selectedLines.start}`
+													: `L${selectedLines.start}-${selectedLines.end}`}
+											</span>
+										</h3>
+
+										{/* Comment / Suggest toggle */}
+										<div className="mb-2 flex gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5">
+											<button
+												type="button"
+												onClick={() => setComposerMode("comment")}
+												className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+													composerMode === "comment"
+														? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
+														: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+												}`}
+											>
+												<MessageSquare className="h-3 w-3" />
+												Comment
+											</button>
+											<button
+												type="button"
+												onClick={() => setComposerMode("suggest")}
+												className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+													composerMode === "suggest"
+														? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
+														: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
+												}`}
+											>
+												<Lightbulb className="h-3 w-3" />
+												Suggest
+											</button>
+										</div>
+
+										{/* Suggestion editor */}
+										{composerMode === "suggest" && (
+											<div className="mb-2">
+												<label
+													htmlFor="suggestion-content"
+													className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[var(--sea-ink-soft)]"
+												>
+													Proposed change
+												</label>
+												<Textarea
+													id="suggestion-content"
+													value={suggestionContent}
+													onChange={(e) => setSuggestionContent(e.target.value)}
+													rows={4}
+													className="resize-y rounded-xl border-[var(--line)] bg-[var(--surface)] font-mono text-xs"
+												/>
+											</div>
+										)}
+
+										<Textarea
+											value={commentDraft}
+											onChange={(e) => setCommentDraft(e.target.value)}
+											placeholder={
+												composerMode === "suggest"
+													? "Explain your suggestion..."
+													: "Share your thoughts on these lines..."
+											}
+											rows={3}
+											className="mb-2 resize-none rounded-xl text-sm"
+											autoFocus
+										/>
+										<div className="flex gap-2">
+											<Button
+												size="sm"
+												variant="brand"
+												onClick={handleAddLineComment}
+												disabled={!commentDraft.trim() || submittingComment}
+												className="rounded-full"
+											>
+												<Send className="mr-1.5 h-3 w-3" />
+												{submittingComment
+													? "Posting..."
+													: composerMode === "suggest"
+														? "Suggest"
+														: "Comment"}
+											</Button>
+											<Button
+												size="sm"
+												variant="ghost"
+												onClick={() => {
+													setSelectedLines(null);
+													setCommentDraft("");
+													setSuggestionContent("");
+													setComposerMode("comment");
+												}}
+												className="rounded-full"
+											>
+												Cancel
+											</Button>
+										</div>
+									</div>
+								)}
+
+								{/* Section-level comment composer */}
+								{activeSection !== null && (
+									<div className="island-shell rounded-2xl p-4">
+										<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
+											Comment on{" "}
+											<span className="font-mono text-[var(--lagoon-deep)]">
+												#{activeSection || "top"}
+											</span>
+										</h3>
+										<Textarea
+											value={commentDraft}
+											onChange={(e) => setCommentDraft(e.target.value)}
+											placeholder="Share your thoughts on this section..."
+											rows={3}
+											className="mb-2 resize-none rounded-xl text-sm"
+											autoFocus
+										/>
+										<div className="flex gap-2">
+											<Button
+												size="sm"
+												variant="brand"
+												onClick={() => handleAddSectionComment(activeSection)}
+												disabled={!commentDraft.trim() || submittingComment}
+												className="rounded-full"
+											>
+												<Send className="mr-1.5 h-3 w-3" />
+												{submittingComment ? "Posting..." : "Comment"}
+											</Button>
+											<Button
+												size="sm"
+												variant="ghost"
+												onClick={() => {
+													setActiveSection(null);
+													setCommentDraft("");
+												}}
+												className="rounded-full"
+											>
+												Cancel
+											</Button>
+										</div>
+									</div>
+								)}
+
+								{/* AI Regeneration suggestions */}
+								{pendingRegenRequests.length > 0 && (
+									<div className="island-shell rounded-2xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800/50 dark:bg-amber-950/20">
+										<div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+											Generating {pendingRegenRequests.length} suggestion
+											{pendingRegenRequests.length !== 1 && "s"}...
+										</div>
+									</div>
+								)}
+
+								{readyRegenRequests.map((req) => (
+									<div
+										key={req.id}
+										className="island-shell rounded-2xl border border-[var(--lagoon)]/30 bg-[var(--lagoon)]/[0.04] p-4 dark:border-[var(--lagoon)]/20 dark:bg-[var(--lagoon)]/[0.06]"
+									>
+										<div className="mb-2 flex items-center gap-2">
+											<Sparkles className="h-3.5 w-3.5 text-[var(--lagoon-deep)]" />
+											<span className="text-xs font-semibold uppercase tracking-wider text-[var(--lagoon-deep)]">
+												AI Suggestion
+											</span>
+											{req.targetStartLine != null && (
+												<span className="line-badge ml-auto">
+													{req.targetEndLine != null &&
+													req.targetEndLine !== req.targetStartLine
+														? `L${req.targetStartLine}-${req.targetEndLine}`
+														: `L${req.targetStartLine}`}
+												</span>
+											)}
+										</div>
+										<p className="mb-2 text-xs leading-relaxed text-[var(--sea-ink-soft)]">
+											{req.userInstruction}
+										</p>
+										{req.originalContent && req.generatedContent && (
+											<SuggestionDiff
+												oldText={req.originalContent}
+												newText={req.generatedContent}
 											/>
+										)}
+										<div className="mt-3 flex gap-2">
+											<Button
+												size="sm"
+												variant="brand"
+												onClick={() => handleAcceptRegeneration(req.id)}
+												disabled={regenBusy === req.id}
+												className="rounded-full"
+											>
+												<Check className="mr-1 h-3 w-3" />
+												{regenBusy === req.id ? "Applying..." : "Accept"}
+											</Button>
+											<Button
+												size="sm"
+												variant="ghost"
+												onClick={() => handleDismissRegeneration(req.id)}
+												disabled={regenBusy === req.id}
+												className="rounded-full"
+											>
+												<X className="mr-1 h-3 w-3" />
+												Dismiss
+											</Button>
+										</div>
+									</div>
+								))}
+
+								{/* Line-level comments */}
+								{lineCommentGroups.length > 0 && (
+									<div className="space-y-2">
+										<h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--sea-ink-soft)]">
+											Line Comments
+										</h4>
+										{lineCommentGroups.map((comment) => (
+											<div key={comment.id}>
+												<button
+													type="button"
+													className="line-badge mb-1 cursor-pointer transition hover:bg-[rgba(79,184,178,0.2)]"
+													onClick={() => handleCommentLineClick(comment)}
+												>
+													{comment.startLine != null &&
+													comment.endLine != null &&
+													comment.endLine !== comment.startLine
+														? `L${comment.startLine}-${comment.endLine}`
+														: `L${comment.startLine}`}
+												</button>
+												<CommentThread
+													comment={comment}
+													replies={getReplies(comment.id)}
+													planId={plan.id}
+													revisionId={latestRevision?.id ?? ""}
+													isAuthor={isAuthor}
+													canInteract={canComment}
+													targetLines={getTargetLines(comment)}
+													originalRevisionNumber={getOriginalRevisionNumber(
+														comment,
+													)}
+												/>
+											</div>
 										))}
 									</div>
-								),
-							)}
+								)}
 
-							{!hasAnyComments && !isComposing && (
-								<div className="island-shell rounded-2xl p-6 text-center">
-									<MessageSquare className="mx-auto mb-3 h-8 w-8 text-[var(--line)]" />
-									<p className="mb-1 text-sm font-medium text-[var(--sea-ink)]">
-										No comments yet
-									</p>
-									<p className="text-xs leading-relaxed text-[var(--sea-ink-soft)]">
-										Start a discussion or switch to Source view to comment on specific lines.
-									</p>
-								</div>
-							)}
-						</div>
+								{/* Section-level comments */}
+								{Array.from(commentsBySection.entries()).map(
+									([sectionId, sectionCmts]) => (
+										<div key={sectionId ?? "top"} className="space-y-2">
+											<h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--sea-ink-soft)]">
+												{sectionId ? `# ${sectionId}` : "General"}
+											</h4>
+											{sectionCmts.map((comment) => (
+												<CommentThread
+													key={comment.id}
+													comment={comment}
+													replies={getReplies(comment.id)}
+													planId={plan.id}
+													revisionId={latestRevision?.id ?? ""}
+													isAuthor={isAuthor}
+													canInteract={canComment}
+													originalRevisionNumber={getOriginalRevisionNumber(
+														comment,
+													)}
+												/>
+											))}
+										</div>
+									),
+								)}
+
+								{!hasAnyComments && !isComposing && (
+									<div className="island-shell rounded-2xl p-6 text-center">
+										<MessageSquare className="mx-auto mb-3 h-8 w-8 text-[var(--line)]" />
+										<p className="mb-1 text-sm font-medium text-[var(--sea-ink)]">
+											No comments yet
+										</p>
+										<p className="text-xs leading-relaxed text-[var(--sea-ink-soft)]">
+											Start a discussion or switch to Source view to comment on
+											specific lines.
+										</p>
+									</div>
+								)}
+							</div>
 						</aside>
 					</div>
 				</>
@@ -1523,13 +1762,10 @@ function BlockCommentWrapper({
 		return <Tag {...props}>{children}</Tag>;
 	}
 
-	const select = () =>
-		onLineSelect({ start: startLine, end: endLine ?? startLine });
-
 	const handleClick = (event: MouseEvent<HTMLDivElement>) => {
 		const target = event.target as HTMLElement | null;
 		if (!target) {
-			select();
+			onLineSelect({ start: startLine, end: endLine ?? startLine });
 			return;
 		}
 
@@ -1541,12 +1777,13 @@ function BlockCommentWrapper({
 			return;
 		}
 
+		// Don't interfere with text selection — let the prose container mouseup handler capture it
 		const selection = window.getSelection();
 		if (selection && selection.toString().trim().length > 0) {
 			return;
 		}
 
-		select();
+		onLineSelect({ start: startLine, end: endLine ?? startLine });
 	};
 
 	return (

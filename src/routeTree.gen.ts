@@ -18,8 +18,11 @@ import { Route as ApiHandoffsSnapshotIdRouteImport } from './routes/api/handoffs
 import { Route as PlanPlanIdSessionsRouteRouteImport } from './routes/plan/$planId/sessions/route'
 import { Route as PlanPlanIdHistoryRouteRouteImport } from './routes/plan/$planId/history/route'
 import { Route as ApiSessionsSessionIdTranscriptRouteImport } from './routes/api/sessions/$sessionId/transcript'
+import { Route as ApiSessionsSessionIdTranscribeRouteImport } from './routes/api/sessions/$sessionId/transcribe'
 import { Route as ApiSessionsSessionIdContextRouteImport } from './routes/api/sessions/$sessionId/context'
 import { Route as ApiHandoffsSnapshotIdAgentRunsRouteImport } from './routes/api/handoffs/$snapshotId/agent-runs'
+import { Route as ApiSessionsSessionIdRegenerationIndexRouteImport } from './routes/api/sessions/$sessionId/regeneration/index'
+import { Route as ApiSessionsSessionIdRegenerationRequestIdRouteImport } from './routes/api/sessions/$sessionId/regeneration/$requestId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -67,6 +70,12 @@ const ApiSessionsSessionIdTranscriptRoute =
     path: '/api/sessions/$sessionId/transcript',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiSessionsSessionIdTranscribeRoute =
+  ApiSessionsSessionIdTranscribeRouteImport.update({
+    id: '/api/sessions/$sessionId/transcribe',
+    path: '/api/sessions/$sessionId/transcribe',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiSessionsSessionIdContextRoute =
   ApiSessionsSessionIdContextRouteImport.update({
     id: '/api/sessions/$sessionId/context',
@@ -78,6 +87,18 @@ const ApiHandoffsSnapshotIdAgentRunsRoute =
     id: '/agent-runs',
     path: '/agent-runs',
     getParentRoute: () => ApiHandoffsSnapshotIdRoute,
+  } as any)
+const ApiSessionsSessionIdRegenerationIndexRoute =
+  ApiSessionsSessionIdRegenerationIndexRouteImport.update({
+    id: '/api/sessions/$sessionId/regeneration/',
+    path: '/api/sessions/$sessionId/regeneration/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSessionsSessionIdRegenerationRequestIdRoute =
+  ApiSessionsSessionIdRegenerationRequestIdRouteImport.update({
+    id: '/api/sessions/$sessionId/regeneration/$requestId',
+    path: '/api/sessions/$sessionId/regeneration/$requestId',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -91,7 +112,10 @@ export interface FileRoutesByFullPath {
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
   '/api/sessions/$sessionId/context': typeof ApiSessionsSessionIdContextRoute
+  '/api/sessions/$sessionId/transcribe': typeof ApiSessionsSessionIdTranscribeRoute
   '/api/sessions/$sessionId/transcript': typeof ApiSessionsSessionIdTranscriptRoute
+  '/api/sessions/$sessionId/regeneration/$requestId': typeof ApiSessionsSessionIdRegenerationRequestIdRoute
+  '/api/sessions/$sessionId/regeneration/': typeof ApiSessionsSessionIdRegenerationIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -104,7 +128,10 @@ export interface FileRoutesByTo {
   '/plan/$planId': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
   '/api/sessions/$sessionId/context': typeof ApiSessionsSessionIdContextRoute
+  '/api/sessions/$sessionId/transcribe': typeof ApiSessionsSessionIdTranscribeRoute
   '/api/sessions/$sessionId/transcript': typeof ApiSessionsSessionIdTranscriptRoute
+  '/api/sessions/$sessionId/regeneration/$requestId': typeof ApiSessionsSessionIdRegenerationRequestIdRoute
+  '/api/sessions/$sessionId/regeneration': typeof ApiSessionsSessionIdRegenerationIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -118,7 +145,10 @@ export interface FileRoutesById {
   '/plan/$planId/': typeof PlanPlanIdIndexRoute
   '/api/handoffs/$snapshotId/agent-runs': typeof ApiHandoffsSnapshotIdAgentRunsRoute
   '/api/sessions/$sessionId/context': typeof ApiSessionsSessionIdContextRoute
+  '/api/sessions/$sessionId/transcribe': typeof ApiSessionsSessionIdTranscribeRoute
   '/api/sessions/$sessionId/transcript': typeof ApiSessionsSessionIdTranscriptRoute
+  '/api/sessions/$sessionId/regeneration/$requestId': typeof ApiSessionsSessionIdRegenerationRequestIdRoute
+  '/api/sessions/$sessionId/regeneration/': typeof ApiSessionsSessionIdRegenerationIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -133,7 +163,10 @@ export interface FileRouteTypes {
     | '/plan/$planId/'
     | '/api/handoffs/$snapshotId/agent-runs'
     | '/api/sessions/$sessionId/context'
+    | '/api/sessions/$sessionId/transcribe'
     | '/api/sessions/$sessionId/transcript'
+    | '/api/sessions/$sessionId/regeneration/$requestId'
+    | '/api/sessions/$sessionId/regeneration/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -146,7 +179,10 @@ export interface FileRouteTypes {
     | '/plan/$planId'
     | '/api/handoffs/$snapshotId/agent-runs'
     | '/api/sessions/$sessionId/context'
+    | '/api/sessions/$sessionId/transcribe'
     | '/api/sessions/$sessionId/transcript'
+    | '/api/sessions/$sessionId/regeneration/$requestId'
+    | '/api/sessions/$sessionId/regeneration'
   id:
     | '__root__'
     | '/'
@@ -159,7 +195,10 @@ export interface FileRouteTypes {
     | '/plan/$planId/'
     | '/api/handoffs/$snapshotId/agent-runs'
     | '/api/sessions/$sessionId/context'
+    | '/api/sessions/$sessionId/transcribe'
     | '/api/sessions/$sessionId/transcript'
+    | '/api/sessions/$sessionId/regeneration/$requestId'
+    | '/api/sessions/$sessionId/regeneration/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -172,7 +211,10 @@ export interface RootRouteChildren {
   ApiHandoffsSnapshotIdRoute: typeof ApiHandoffsSnapshotIdRouteWithChildren
   PlanPlanIdIndexRoute: typeof PlanPlanIdIndexRoute
   ApiSessionsSessionIdContextRoute: typeof ApiSessionsSessionIdContextRoute
+  ApiSessionsSessionIdTranscribeRoute: typeof ApiSessionsSessionIdTranscribeRoute
   ApiSessionsSessionIdTranscriptRoute: typeof ApiSessionsSessionIdTranscriptRoute
+  ApiSessionsSessionIdRegenerationRequestIdRoute: typeof ApiSessionsSessionIdRegenerationRequestIdRoute
+  ApiSessionsSessionIdRegenerationIndexRoute: typeof ApiSessionsSessionIdRegenerationIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -240,6 +282,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionsSessionIdTranscriptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sessions/$sessionId/transcribe': {
+      id: '/api/sessions/$sessionId/transcribe'
+      path: '/api/sessions/$sessionId/transcribe'
+      fullPath: '/api/sessions/$sessionId/transcribe'
+      preLoaderRoute: typeof ApiSessionsSessionIdTranscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionId/context': {
       id: '/api/sessions/$sessionId/context'
       path: '/api/sessions/$sessionId/context'
@@ -253,6 +302,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/handoffs/$snapshotId/agent-runs'
       preLoaderRoute: typeof ApiHandoffsSnapshotIdAgentRunsRouteImport
       parentRoute: typeof ApiHandoffsSnapshotIdRoute
+    }
+    '/api/sessions/$sessionId/regeneration/': {
+      id: '/api/sessions/$sessionId/regeneration/'
+      path: '/api/sessions/$sessionId/regeneration'
+      fullPath: '/api/sessions/$sessionId/regeneration/'
+      preLoaderRoute: typeof ApiSessionsSessionIdRegenerationIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sessions/$sessionId/regeneration/$requestId': {
+      id: '/api/sessions/$sessionId/regeneration/$requestId'
+      path: '/api/sessions/$sessionId/regeneration/$requestId'
+      fullPath: '/api/sessions/$sessionId/regeneration/$requestId'
+      preLoaderRoute: typeof ApiSessionsSessionIdRegenerationRequestIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -280,7 +343,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHandoffsSnapshotIdRoute: ApiHandoffsSnapshotIdRouteWithChildren,
   PlanPlanIdIndexRoute: PlanPlanIdIndexRoute,
   ApiSessionsSessionIdContextRoute: ApiSessionsSessionIdContextRoute,
+  ApiSessionsSessionIdTranscribeRoute: ApiSessionsSessionIdTranscribeRoute,
   ApiSessionsSessionIdTranscriptRoute: ApiSessionsSessionIdTranscriptRoute,
+  ApiSessionsSessionIdRegenerationRequestIdRoute:
+    ApiSessionsSessionIdRegenerationRequestIdRoute,
+  ApiSessionsSessionIdRegenerationIndexRoute:
+    ApiSessionsSessionIdRegenerationIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

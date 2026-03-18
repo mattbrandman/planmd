@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=400" />
+		<title>planmd Transcription</title>
+		<style>
+			* {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+					sans-serif;
+				width: 380px;
+				padding: 16px;
+				background: #fafafa;
+				color: #1a1a1a;
+			}
+
+			h1 {
+				font-size: 16px;
+				font-weight: 600;
+				margin-bottom: 4px;
+			}
+
+			.subtitle {
+				font-size: 12px;
+				color: #666;
+				margin-bottom: 16px;
+			}
+
+			/* Status indicator */
+			.status-bar {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 8px 12px;
+				border-radius: 8px;
+				margin-bottom: 16px;
+				font-size: 13px;
+				font-weight: 500;
+			}
+
+			.status-dot {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				flex-shrink: 0;
+			}
+
+			.status-disconnected {
+				background: #f3f4f6;
+				color: #6b7280;
+			}
+			.status-disconnected .status-dot {
+				background: #9ca3af;
+			}
+
+			.status-connected {
+				background: #ecfdf5;
+				color: #065f46;
+			}
+			.status-connected .status-dot {
+				background: #10b981;
+			}
+
+			.status-capturing {
+				background: #eff6ff;
+				color: #1e40af;
+			}
+			.status-capturing .status-dot {
+				background: #3b82f6;
+				animation: pulse 1.5s ease-in-out infinite;
+			}
+
+			.status-error {
+				background: #fef2f2;
+				color: #991b1b;
+			}
+			.status-error .status-dot {
+				background: #ef4444;
+			}
+
+			@keyframes pulse {
+				0%,
+				100% {
+					opacity: 1;
+				}
+				50% {
+					opacity: 0.4;
+				}
+			}
+
+			/* Form fields */
+			label {
+				display: block;
+				font-size: 12px;
+				font-weight: 500;
+				color: #374151;
+				margin-bottom: 4px;
+			}
+
+			input[type="text"],
+			input[type="url"] {
+				width: 100%;
+				padding: 8px 10px;
+				border: 1px solid #d1d5db;
+				border-radius: 6px;
+				font-size: 13px;
+				margin-bottom: 12px;
+				outline: none;
+				transition: border-color 0.15s;
+			}
+
+			input:focus {
+				border-color: #3b82f6;
+				box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+			}
+
+			input:disabled {
+				background: #f3f4f6;
+				color: #9ca3af;
+			}
+
+			.hint {
+				font-size: 11px;
+				color: #9ca3af;
+				margin-top: -8px;
+				margin-bottom: 12px;
+			}
+
+			/* Buttons */
+			.btn-row {
+				display: flex;
+				gap: 8px;
+				margin-bottom: 16px;
+			}
+
+			button {
+				flex: 1;
+				padding: 8px 12px;
+				border: none;
+				border-radius: 6px;
+				font-size: 13px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: background 0.15s, opacity 0.15s;
+			}
+
+			button:disabled {
+				opacity: 0.5;
+				cursor: not-allowed;
+			}
+
+			.btn-primary {
+				background: #3b82f6;
+				color: white;
+			}
+			.btn-primary:hover:not(:disabled) {
+				background: #2563eb;
+			}
+
+			.btn-danger {
+				background: #ef4444;
+				color: white;
+			}
+			.btn-danger:hover:not(:disabled) {
+				background: #dc2626;
+			}
+
+			.btn-secondary {
+				background: #e5e7eb;
+				color: #374151;
+			}
+			.btn-secondary:hover:not(:disabled) {
+				background: #d1d5db;
+			}
+
+			/* Transcript preview */
+			.transcript-section {
+				border-top: 1px solid #e5e7eb;
+				padding-top: 12px;
+			}
+
+			.transcript-header {
+				font-size: 12px;
+				font-weight: 600;
+				color: #374151;
+				margin-bottom: 8px;
+			}
+
+			.transcript-preview {
+				max-height: 150px;
+				overflow-y: auto;
+				background: white;
+				border: 1px solid #e5e7eb;
+				border-radius: 6px;
+				padding: 8px 10px;
+				font-size: 12px;
+				line-height: 1.5;
+				color: #4b5563;
+			}
+
+			.transcript-preview:empty::before {
+				content: "Transcript chunks will appear here during capture...";
+				color: #9ca3af;
+				font-style: italic;
+			}
+
+			.transcript-chunk {
+				padding: 4px 0;
+				border-bottom: 1px solid #f3f4f6;
+			}
+
+			.transcript-chunk:last-child {
+				border-bottom: none;
+			}
+
+			.chunk-time {
+				font-size: 10px;
+				color: #9ca3af;
+				margin-bottom: 2px;
+			}
+
+			/* Error message */
+			.error-msg {
+				font-size: 12px;
+				color: #dc2626;
+				margin-bottom: 8px;
+				display: none;
+			}
+
+			.error-msg.visible {
+				display: block;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>planmd Transcription</h1>
+		<p class="subtitle">Capture Google Meet audio for plan review sessions</p>
+
+		<!-- Status indicator -->
+		<div id="statusBar" class="status-bar status-disconnected">
+			<span class="status-dot"></span>
+			<span id="statusText">Disconnected</span>
+		</div>
+
+		<!-- Error message -->
+		<p id="errorMsg" class="error-msg"></p>
+
+		<!-- Connection settings -->
+		<label for="sessionUrl">Session URL or Capture Token</label>
+		<input
+			type="text"
+			id="sessionUrl"
+			placeholder="https://planmd.dev/session/abc123?token=xyz or just the token"
+		/>
+		<p class="hint">
+			Paste the full session URL or the capture token from planmd
+		</p>
+
+		<label for="apiBaseUrl">API Base URL</label>
+		<input
+			type="url"
+			id="apiBaseUrl"
+			placeholder="https://planmd.dev"
+			value="https://planmd.dev"
+		/>
+		<p class="hint">Change to http://localhost:3000 for local development</p>
+
+		<!-- Action buttons -->
+		<div class="btn-row">
+			<button id="connectBtn" class="btn-primary">Connect</button>
+			<button id="captureBtn" class="btn-secondary" disabled>
+				Start Capture
+			</button>
+		</div>
+
+		<!-- Transcript preview -->
+		<div class="transcript-section">
+			<p class="transcript-header">Recent Transcript</p>
+			<div id="transcriptPreview" class="transcript-preview"></div>
+		</div>
+
+		<script src="popup.js"></script>
+	</body>
+</html>

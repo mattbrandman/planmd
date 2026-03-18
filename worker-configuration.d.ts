@@ -11,6 +11,8 @@ declare namespace Cloudflare {
 		GITHUB_CLIENT_SECRET: string;
 		DEV_BYPASS_AUTH: string;
 		VITE_DEV_BYPASS_AUTH: string;
+		OPENAI_API_KEY: string;
+		ANTHROPIC_API_KEY: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

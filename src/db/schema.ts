@@ -204,39 +204,47 @@ export const participants = sqliteTable(
 
 // ── Live Sessions ──────────────────────────────────────────────────────────────
 // Private collaboration sessions that collect transcript and semantic repo context
-export const planSessions = sqliteTable("plan_sessions", {
-	id: text("id").primaryKey(),
-	planId: text("plan_id")
-		.notNull()
-		.references(() => plans.id, { onDelete: "cascade" }),
-	status: text("status", {
-		enum: ["live", "ended"],
-	})
-		.notNull()
-		.default("live"),
-	meetingProvider: text("meeting_provider", {
-		enum: ["google_meet", "manual"],
-	})
-		.notNull()
-		.default("google_meet"),
-	title: text("title"),
-	captureToken: text("capture_token").notNull(),
-	createdBy: text("created_by")
-		.notNull()
-		.references(() => users.id),
-	startedAt: integer("started_at", { mode: "timestamp_ms" })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`),
-	endedAt: integer("ended_at", { mode: "timestamp_ms" }),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`),
-}, (table) => [
-	uniqueIndex("plan_sessions_capture_token_idx").on(table.captureToken),
-]);
+export const planSessions = sqliteTable(
+	"plan_sessions",
+	{
+		id: text("id").primaryKey(),
+		planId: text("plan_id")
+			.notNull()
+			.references(() => plans.id, { onDelete: "cascade" }),
+		status: text("status", {
+			enum: ["live", "ended"],
+		})
+			.notNull()
+			.default("live"),
+		meetingProvider: text("meeting_provider", {
+			enum: ["google_meet", "manual"],
+		})
+			.notNull()
+			.default("google_meet"),
+		title: text("title"),
+		captureToken: text("capture_token").notNull(),
+		meetingUrl: text("meeting_url"),
+		audioCaptureStatus: text("audio_capture_status", {
+			enum: ["inactive", "capturing", "paused", "error"],
+		}).default("inactive"),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => users.id),
+		startedAt: integer("started_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+	},
+	(table) => [
+		uniqueIndex("plan_sessions_capture_token_idx").on(table.captureToken),
+	],
+);
 
 export const transcriptChunks = sqliteTable("transcript_chunks", {
 	id: text("id").primaryKey(),
@@ -254,6 +262,30 @@ export const transcriptChunks = sqliteTable("transcript_chunks", {
 	createdAt: integer("created_at", { mode: "timestamp_ms" })
 		.notNull()
 		.default(sql`(unixepoch() * 1000)`),
+});
+
+export const transcriptionJobs = sqliteTable("transcription_jobs", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id")
+		.notNull()
+		.references(() => planSessions.id, { onDelete: "cascade" }),
+	chunkIndex: integer("chunk_index").notNull(),
+	audioDurationMs: integer("audio_duration_ms").notNull(),
+	speakerHints: text("speaker_hints"), // JSON array of speaker names
+	status: text("status", {
+		enum: ["pending", "processing", "completed", "failed"],
+	})
+		.notNull()
+		.default("pending"),
+	transcriptText: text("transcript_text"),
+	transcriptChunkId: text("transcript_chunk_id").references(
+		() => transcriptChunks.id,
+	),
+	errorMessage: text("error_message"),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+	completedAt: integer("completed_at", { mode: "timestamp_ms" }),
 });
 
 export const contextEvents = sqliteTable("context_events", {
@@ -379,3 +411,44 @@ export const agentRuns = sqliteTable(
 		),
 	],
 );
+
+// ── Regeneration Requests ───────────────────────────────────────────────────
+// AI-assisted plan section regeneration triggered during live sessions
+export const regenerationRequests = sqliteTable("regeneration_requests", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id")
+		.notNull()
+		.references(() => planSessions.id, { onDelete: "cascade" }),
+	planId: text("plan_id")
+		.notNull()
+		.references(() => plans.id, { onDelete: "cascade" }),
+	revisionId: text("revision_id")
+		.notNull()
+		.references(() => revisions.id, { onDelete: "cascade" }),
+	contextEventId: text("context_event_id").references(() => contextEvents.id),
+	transcriptChunkId: text("transcript_chunk_id").references(
+		() => transcriptChunks.id,
+	),
+	targetSection: text("target_section"),
+	targetStartLine: integer("target_start_line"),
+	targetEndLine: integer("target_end_line"),
+	highlightedText: text("highlighted_text"),
+	userInstruction: text("user_instruction").notNull(),
+	transcriptWindowStart: integer("transcript_window_start"),
+	transcriptWindowEnd: integer("transcript_window_end"),
+	status: text("status", {
+		enum: ["detected", "generating", "ready", "accepted", "dismissed"],
+	})
+		.notNull()
+		.default("detected"),
+	generatedContent: text("generated_content"),
+	originalContent: text("original_content"),
+	applied: integer("applied", { mode: "boolean" }).notNull().default(false),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`),
+	completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+	createdBy: text("created_by")
+		.notNull()
+		.references(() => users.id),
+});

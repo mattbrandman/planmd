@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>planmd - Microphone Access</title>
+  <style>
+    body { font-family: system-ui; text-align: center; padding: 40px; background: #f8f9fa; }
+    .card { background: white; border-radius: 12px; padding: 32px; max-width: 400px; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    p { color: #666; font-size: 14px; margin: 0 0 20px; }
+    button { background: #10b981; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #059669; }
+    .status { font-size: 14px; margin-top: 16px; padding: 8px 16px; border-radius: 8px; display: none; }
+    .granted { background: #d4edda; color: #155724; display: block; }
+    .denied { background: #f8d7da; color: #721c24; display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Microphone Access</h2>
+    <p>Click the button below to grant microphone access. This lets planmd capture your voice during meetings.</p>
+    <button id="grantBtn">Allow Microphone</button>
+    <div id="status" class="status"></div>
+  </div>
+  <script>
+    document.getElementById('grantBtn').addEventListener('click', async () => {
+      const status = document.getElementById('status');
+      const btn = document.getElementById('grantBtn');
+      btn.disabled = true;
+      btn.textContent = 'Requesting...';
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+        status.textContent = 'Microphone access granted! You can close this tab.';
+        status.className = 'status granted';
+        btn.style.display = 'none';
+        chrome.runtime.sendMessage({ type: 'mic-permission-granted' });
+        setTimeout(() => window.close(), 1500);
+      } catch (err) {
+        status.textContent = 'Permission denied. Tab audio will still be captured.';
+        status.className = 'status denied';
+        btn.textContent = 'Try Again';
+        btn.disabled = false;
+        chrome.runtime.sendMessage({ type: 'mic-permission-denied' });
+      }
+    });
+  </script>
+</body>
+</html>

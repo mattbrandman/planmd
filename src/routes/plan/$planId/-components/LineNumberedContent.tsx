@@ -13,7 +13,7 @@ interface LineComment {
 
 interface LineNumberedContentProps {
 	content: string;
-	onLineSelect: (range: LineRange) => void;
+	onLineSelect: (range: LineRange, selectedText?: string) => void;
 	selectedLines: LineRange | null;
 	commentedLines: LineComment[];
 	highlightedLines: LineRange | null;
@@ -95,6 +95,42 @@ export default function LineNumberedContent({
 		}
 	}, [highlightedLines]);
 
+	// Capture drag-selected text across lines
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		const handleMouseUp = () => {
+			const selection = window.getSelection();
+			if (!selection || selection.isCollapsed) return;
+
+			const selectedText = selection.toString().trim();
+			if (!selectedText) return;
+
+			// Walk up from anchor/focus nodes to find [data-line] attributes
+			const findLineNum = (node: Node | null): number | null => {
+				let el = node instanceof HTMLElement ? node : node?.parentElement;
+				while (el && el !== container) {
+					if (el.dataset.line) return Number(el.dataset.line);
+					el = el.parentElement;
+				}
+				return null;
+			};
+
+			const anchorLine = findLineNum(selection.anchorNode);
+			const focusLine = findLineNum(selection.focusNode);
+			if (anchorLine == null || focusLine == null) return;
+
+			const start = Math.min(anchorLine, focusLine);
+			const end = Math.max(anchorLine, focusLine);
+			onLineSelect({ start, end }, selectedText);
+			selection.removeAllRanges();
+		};
+
+		container.addEventListener("mouseup", handleMouseUp);
+		return () => container.removeEventListener("mouseup", handleMouseUp);
+	}, [onLineSelect]);
+
 	useEffect(() => {
 		if (!onVisibleRangeChange || !containerRef.current) return;
 
@@ -102,7 +138,8 @@ export default function LineNumberedContent({
 		const reportVisibleRange = () => {
 			frameId = 0;
 			const lineElements = Array.from(
-				containerRef.current?.querySelectorAll<HTMLElement>("[data-line]") ?? [],
+				containerRef.current?.querySelectorAll<HTMLElement>("[data-line]") ??
+					[],
 			);
 			if (lineElements.length === 0) return;
 

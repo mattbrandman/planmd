@@ -1,0 +1,16 @@
+{
+	"manifest_version": 3,
+	"name": "planmd - Meet Transcription",
+	"description": "Capture Google Meet audio and send to planmd for live transcription during plan review sessions.",
+	"version": "0.1.0",
+	"permissions": ["tabCapture", "activeTab", "storage", "offscreen", "scripting"],
+	"host_permissions": ["https://*.planmd.dev/*", "http://localhost/*", "https://meet.google.com/*"],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "planmd Transcription"
+	},
+	"minimum_chrome_version": "116"
+}

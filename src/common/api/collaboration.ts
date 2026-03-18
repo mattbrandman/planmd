@@ -9,7 +9,10 @@ import {
 	generatePlanSessionDraft,
 	getPlanWorkspaceData,
 	getPublicHandoffSnapshotBySlug,
+	getRegenerationRequestsForSession,
 	stopPlanSession,
+	triggerRegenerationForRequest,
+	updateRegenerationRequestStatus,
 } from "#/common/lib/collaboration-server";
 
 const contextEventKindSchema = z.enum([
@@ -117,3 +120,26 @@ export const buildSessionDraft = createServerFn({ method: "POST" })
 export const getPublicHandoffSnapshot = createServerFn({ method: "GET" })
 	.inputValidator(z.object({ publicSlug: z.string() }))
 	.handler(async ({ data }) => getPublicHandoffSnapshotBySlug(data.publicSlug));
+
+export const getRegenerationRequests = createServerFn({ method: "GET" })
+	.inputValidator(z.object({ sessionId: z.string() }))
+	.handler(async ({ data }) =>
+		getRegenerationRequestsForSession(data.sessionId),
+	);
+
+export const triggerRegeneration = createServerFn({ method: "POST" })
+	.inputValidator(z.object({ sessionId: z.string(), requestId: z.string() }))
+	.handler(async ({ data }) =>
+		triggerRegenerationForRequest(data.sessionId, data.requestId),
+	);
+
+export const updateRegeneration = createServerFn({ method: "POST" })
+	.inputValidator(
+		z.object({
+			requestId: z.string(),
+			action: z.enum(["accepted", "dismissed"]),
+		}),
+	)
+	.handler(async ({ data }) =>
+		updateRegenerationRequestStatus(data.requestId, data.action),
+	);

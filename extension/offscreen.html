@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+	<head>
+		<title>planmd Offscreen Audio Recorder</title>
+	</head>
+	<body>
+		<!-- This document runs offscreen to handle MediaRecorder, which is not
+		     available in the service worker context. It receives a tab capture
+		     stream ID from the background worker, records audio in chunks,
+		     and sends them to the planmd transcription API. -->
+		<script src="offscreen.js"></script>
+	</body>
+</html>

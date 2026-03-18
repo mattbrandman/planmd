@@ -1,11 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import {
-	buildHandoffPayload,
-	createPublicSlug,
-} from "#/common/lib/handoff";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { requireAuth } from "#/common/lib/auth-guard";
+import { buildHandoffPayload, createPublicSlug } from "#/common/lib/handoff";
 import { newId } from "#/common/lib/id";
+import { generateSectionReplacement } from "#/common/lib/regeneration";
 import { buildSessionDraft } from "#/common/lib/session-draft";
 import { getDb } from "#/db";
 import {
@@ -13,8 +11,9 @@ import {
 	attentionItems,
 	contextEvents,
 	handoffSnapshots,
-	plans,
 	planSessions,
+	plans,
+	regenerationRequests,
 	revisions,
 	transcriptChunks,
 } from "#/db/schema";
@@ -501,7 +500,10 @@ async function ensureSessionViewer(sessionId: string) {
 	return session;
 }
 
-async function ensureSessionCaptureToken(sessionId: string, captureToken: string) {
+async function ensureSessionCaptureToken(
+	sessionId: string,
+	captureToken: string,
+) {
 	const session = await getDb(env.planmd_db).query.planSessions.findFirst({
 		where: eq(planSessions.id, sessionId),
 	});
@@ -567,6 +569,145 @@ async function getSessionBundlesByRows(
 		contextEvents: events.filter((event) => event.sessionId === session.id),
 		attentionItems: items.filter((item) => item.sessionId === session.id),
 	}));
+}
+
+// ── Regeneration request helpers ─────────────────────────────────────────────
+
+export async function getRegenerationRequestsForSession(sessionId: string) {
+	const db = getDb(env.planmd_db);
+	const requests = await db
+		.select()
+		.from(regenerationRequests)
+		.where(
+			and(
+				eq(regenerationRequests.sessionId, sessionId),
+				inArray(regenerationRequests.status, [
+					"detected",
+					"generating",
+					"ready",
+				]),
+			),
+		)
+		.orderBy(desc(regenerationRequests.createdAt));
+
+	return { requests };
+}
+
+export async function triggerRegenerationForRequest(
+	sessionId: string,
+	requestId: string,
+) {
+	const db = getDb(env.planmd_db);
+
+	const request = await db.query.regenerationRequests.findFirst({
+		where: and(
+			eq(regenerationRequests.id, requestId),
+			eq(regenerationRequests.sessionId, sessionId),
+		),
+	});
+
+	if (!request) throw new Error("Regeneration request not found");
+
+	if (request.status !== "detected" && request.status !== "generating") {
+		throw new Error(
+			`Request is in "${request.status}" status, cannot regenerate`,
+		);
+	}
+
+	// Mark as generating
+	await db
+		.update(regenerationRequests)
+		.set({ status: "generating" })
+		.where(eq(regenerationRequests.id, request.id));
+
+	// Load plan content from revision
+	const revision = await db.query.revisions.findFirst({
+		where: eq(revisions.id, request.revisionId),
+	});
+	if (!revision) throw new Error("Revision not found");
+
+	// Load recent transcript for context (5-minute window)
+	const windowStart = request.transcriptWindowStart
+		? new Date(
+				typeof request.transcriptWindowStart === "number"
+					? request.transcriptWindowStart
+					: Number(request.transcriptWindowStart),
+			)
+		: new Date(Date.now() - 300_000);
+	const windowEnd = request.transcriptWindowEnd
+		? new Date(
+				typeof request.transcriptWindowEnd === "number"
+					? request.transcriptWindowEnd
+					: Number(request.transcriptWindowEnd),
+			)
+		: new Date();
+
+	const recentChunks = await db
+		.select()
+		.from(transcriptChunks)
+		.where(
+			and(
+				eq(transcriptChunks.sessionId, sessionId),
+				gte(transcriptChunks.occurredAt, windowStart),
+				lte(transcriptChunks.occurredAt, windowEnd),
+			),
+		)
+		.orderBy(asc(transcriptChunks.occurredAt));
+
+	const recentTranscript = recentChunks
+		.map((c) => `${c.speakerName ?? "Unknown"}: ${c.text}`)
+		.join("\n");
+
+	// Generate replacement via Claude
+	const generatedContent = await generateSectionReplacement({
+		planContent: revision.content,
+		targetSection: request.targetSection,
+		highlightedText: request.highlightedText ?? "",
+		instruction: request.userInstruction,
+		recentTranscript,
+	});
+
+	// Update request with generated content
+	await db
+		.update(regenerationRequests)
+		.set({
+			status: "ready",
+			generatedContent,
+			completedAt: new Date(),
+		})
+		.where(eq(regenerationRequests.id, request.id));
+
+	return {
+		requestId: request.id,
+		status: "ready" as const,
+		generatedContent,
+		originalContent: request.originalContent,
+		targetStartLine: request.targetStartLine,
+		targetEndLine: request.targetEndLine,
+	};
+}
+
+export async function updateRegenerationRequestStatus(
+	requestId: string,
+	action: "accepted" | "dismissed",
+) {
+	const db = getDb(env.planmd_db);
+
+	const request = await db.query.regenerationRequests.findFirst({
+		where: eq(regenerationRequests.id, requestId),
+	});
+	if (!request) throw new Error("Regeneration request not found");
+
+	await db
+		.update(regenerationRequests)
+		.set({
+			status: action,
+			applied: action === "accepted",
+			completedAt: new Date(),
+		})
+		.where(eq(regenerationRequests.id, request.id));
+
+	return { requestId: request.id, status: action };
 }
 
 function parseJsonArray(value: string): string[] {
