@@ -79,6 +79,9 @@ const STATUS_CONFIG = {
 
 type PlanStatus = keyof typeof STATUS_CONFIG;
 
+const REMARK_PLUGINS = [remarkGfm];
+const REHYPE_PLUGINS = [rehypeSlug];
+
 type ViewMode = "rendered" | "source";
 type ComposerMode = "comment" | "suggest";
 
@@ -265,6 +268,8 @@ export default function PlanDetailPage({
 	const [viewMode, setViewMode] = useState<ViewMode>("rendered");
 	const [activeSection, setActiveSection] = useState<string | null>(null);
 	const [selectedLines, setSelectedLines] = useState<LineRange | null>(null);
+	const selectedLinesRef = useRef(selectedLines);
+	selectedLinesRef.current = selectedLines;
 	const [highlightedLines, setHighlightedLines] = useState<LineRange | null>(
 		null,
 	);
@@ -777,28 +782,32 @@ export default function PlanDetailPage({
 		}
 	}
 
-	function handleLineSelect(range: LineRange, selectedText?: string) {
-		if (!canComment) return;
-		setCommentError(null);
-		setSelectedLines(range);
-		setActiveSection(null);
-		setGeneralComposing(false);
-		setHighlightedLines(null);
-		// Use provided selectedText or extract from contentLines as fallback
-		const text =
-			selectedText || contentLines.slice(range.start - 1, range.end).join("\n");
-		recordPlanInteraction({
-			kind: "selection",
-			interaction: "line_select",
-			selectedLines: range,
-			selectedText: text,
-			dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
-		});
-		// Pre-fill suggestion content with selected lines
-		setSuggestionContent(
-			contentLines.slice(range.start - 1, range.end).join("\n"),
-		);
-	}
+	const handleLineSelect = useCallback(
+		(range: LineRange, selectedText?: string) => {
+			if (!canComment) return;
+			setCommentError(null);
+			setSelectedLines(range);
+			setActiveSection(null);
+			setGeneralComposing(false);
+			setHighlightedLines(null);
+			// Use provided selectedText or extract from contentLines as fallback
+			const text =
+				selectedText ||
+				contentLines.slice(range.start - 1, range.end).join("\n");
+			recordPlanInteraction({
+				kind: "selection",
+				interaction: "line_select",
+				selectedLines: range,
+				selectedText: text,
+				dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
+			});
+			// Pre-fill suggestion content with selected lines
+			setSuggestionContent(
+				contentLines.slice(range.start - 1, range.end).join("\n"),
+			);
+		},
+		[canComment, contentLines, recordPlanInteraction, viewMode],
+	);
 
 	function handleCommentLineClick(comment: {
 		startLine: number | null;
@@ -845,17 +854,82 @@ export default function PlanDetailPage({
 		router.invalidate();
 	}
 
-	function handleSectionFocus(sectionId: string | null) {
-		setCommentError(null);
-		setActiveSection(sectionId);
-		recordPlanInteraction({
-			kind: "section_focus",
-			interaction: "section_focus",
-			activeSection: sectionId,
-			selectedLines,
-			dedupeKey: `section:${sectionId ?? "top"}:${viewMode}`,
-		});
-	}
+	const handleSectionFocus = useCallback(
+		(sectionId: string | null) => {
+			setCommentError(null);
+			setActiveSection(sectionId);
+			recordPlanInteraction({
+				kind: "section_focus",
+				interaction: "section_focus",
+				activeSection: sectionId,
+				selectedLines: selectedLinesRef.current,
+				dedupeKey: `section:${sectionId ?? "top"}:${viewMode}`,
+			});
+		},
+		[recordPlanInteraction, viewMode],
+	);
+
+	// Memoize ReactMarkdown components to avoid re-rendering every block on
+	// unrelated state changes (comment draft typing, hover, etc.).
+	const markdownComponents = useMemo(() => {
+		const blockWrapper =
+			(tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr") =>
+			// biome-ignore lint/suspicious/noExplicitAny: react-markdown component props
+			({ node, children, ...rest }: any) => (
+				<BlockCommentWrapper
+					node={node}
+					tag={tag}
+					canComment={canComment}
+					onLineSelect={handleLineSelect}
+					{...rest}
+				>
+					{children}
+				</BlockCommentWrapper>
+			);
+
+		const sectionHeading =
+			(level: 1 | 2 | 3) =>
+			// biome-ignore lint/suspicious/noExplicitAny: react-markdown component props
+			({ children, id }: any) => (
+				<SectionHeading
+					id={id}
+					level={level}
+					commentCount={commentsBySection.get(id ?? null)?.length ?? 0}
+					canComment={canComment}
+					onComment={() => handleSectionFocus(id ?? null)}
+				>
+					{children}
+				</SectionHeading>
+			);
+
+		return {
+			h1: sectionHeading(1),
+			h2: sectionHeading(2),
+			h3: sectionHeading(3),
+			p: blockWrapper("p"),
+			ul: blockWrapper("ul"),
+			ol: blockWrapper("ol"),
+			blockquote: blockWrapper("blockquote"),
+			pre: blockWrapper("pre"),
+			table: blockWrapper("table"),
+			hr: blockWrapper("hr"),
+		};
+	}, [canComment, commentsBySection, handleLineSelect, handleSectionFocus]);
+
+	// Memoize the rendered markdown so parent re-renders (comment drafts,
+	// composer open/close, etc.) don't re-run react-markdown's pipeline.
+	const renderedMarkdown = useMemo(
+		() => (
+			<ReactMarkdown
+				remarkPlugins={REMARK_PLUGINS}
+				rehypePlugins={REHYPE_PLUGINS}
+				components={markdownComponents}
+			>
+				{content}
+			</ReactMarkdown>
+		),
+		[content, markdownComponents],
+	);
 
 	const statusConfig = STATUS_CONFIG[plan.status];
 	const StatusIcon = statusConfig.icon;
@@ -1157,128 +1231,7 @@ export default function PlanDetailPage({
 									ref={renderedProseRef}
 									className="prose prose-neutral max-w-none dark:prose-invert plan-prose"
 								>
-									<ReactMarkdown
-										remarkPlugins={[remarkGfm]}
-										rehypePlugins={[rehypeSlug]}
-										components={{
-											h1: ({ children, id }) => (
-												<SectionHeading
-													id={id}
-													level={1}
-													commentCount={
-														commentsBySection.get(id ?? null)?.length ?? 0
-													}
-													canComment={canComment}
-													onComment={() => handleSectionFocus(id ?? null)}
-												>
-													{children}
-												</SectionHeading>
-											),
-											h2: ({ children, id }) => (
-												<SectionHeading
-													id={id}
-													level={2}
-													commentCount={
-														commentsBySection.get(id ?? null)?.length ?? 0
-													}
-													canComment={canComment}
-													onComment={() => handleSectionFocus(id ?? null)}
-												>
-													{children}
-												</SectionHeading>
-											),
-											h3: ({ children, id }) => (
-												<SectionHeading
-													id={id}
-													level={3}
-													commentCount={
-														commentsBySection.get(id ?? null)?.length ?? 0
-													}
-													canComment={canComment}
-													onComment={() => handleSectionFocus(id ?? null)}
-												>
-													{children}
-												</SectionHeading>
-											),
-											p: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="p"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											ul: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="ul"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											ol: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="ol"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											blockquote: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="blockquote"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											pre: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="pre"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											table: ({ node, children, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="table"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												>
-													{children}
-												</BlockCommentWrapper>
-											),
-											hr: ({ node, ...rest }) => (
-												<BlockCommentWrapper
-													node={node}
-													tag="hr"
-													canComment={canComment}
-													onLineSelect={handleLineSelect}
-													{...rest}
-												/>
-											),
-										}}
-									>
-										{content}
-									</ReactMarkdown>
+									{renderedMarkdown}
 								</div>
 							) : (
 								<LineNumberedContent
