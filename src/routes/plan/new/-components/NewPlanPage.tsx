@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Eye, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { createPlan } from "#/common/api/plans";
 import { Alert } from "#/common/components/ui/alert";
@@ -173,7 +174,7 @@ export default function NewPlanPage() {
 					{preview ? (
 						<div className="prose prose-sm max-w-none rounded-xl border border-[var(--line)] bg-white/60 p-6 dark:bg-black/20">
 							{content ? (
-								<ReactMarkdown remarkPlugins={[remarkGfm]}>
+								<ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
 									{content}
 								</ReactMarkdown>
 							) : (

@@ -97,8 +97,6 @@ Second features section.`;
 	});
 
 	it("ignores lines that look like headings inside code blocks", () => {
-		// Note: our simple parser does match these since it doesn't track code blocks.
-		// This test documents current behavior.
 		const md = `## Real Heading
 
 \`\`\`
@@ -108,10 +106,24 @@ Second features section.`;
 ## Another Heading`;
 
 		const sections = parseSections(md);
-		// Current behavior: 3 sections (includes the one inside code block)
-		// This is acceptable for v1 — comments anchor to section IDs, not line numbers
-		expect(sections.length).toBeGreaterThanOrEqual(2);
+		expect(sections).toHaveLength(2);
 		expect(sections[0].id).toBe("real-heading");
+		expect(sections[1].id).toBe("another-heading");
+	});
+
+	it("ignores headings inside tilde-fenced code blocks", () => {
+		const md = `## Start
+
+~~~
+## Fake
+~~~
+
+## End`;
+
+		const sections = parseSections(md);
+		expect(sections).toHaveLength(2);
+		expect(sections[0].id).toBe("start");
+		expect(sections[1].id).toBe("end");
 	});
 });
 

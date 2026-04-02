@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeft, GitBranch } from "lucide-react";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { computeDiff } from "#/common/lib/diff";
 
@@ -170,7 +171,7 @@ export default function HistoryPage({ plan, revisions }: HistoryPageProps) {
 						</div>
 					) : selected ? (
 						<div className="prose prose-sm max-w-none">
-							<ReactMarkdown remarkPlugins={[remarkGfm]}>
+							<ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
 								{selected.content}
 							</ReactMarkdown>
 						</div>

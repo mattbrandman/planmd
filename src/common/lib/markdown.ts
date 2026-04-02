@@ -40,7 +40,15 @@ export function parseSections(content: string): MarkdownSection[] {
 	const sections: MarkdownSection[] = [];
 	const slugCounts = new Map<string, number>();
 
+	let inFencedBlock = false;
+
 	for (let i = 0; i < lines.length; i++) {
+		if (/^(`{3,}|~{3,})/.test(lines[i])) {
+			inFencedBlock = !inFencedBlock;
+			continue;
+		}
+		if (inFencedBlock) continue;
+
 		const match = lines[i].match(/^(#{1,6})\s+(.+)$/);
 		if (!match) continue;
 

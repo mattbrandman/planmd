@@ -56,6 +56,8 @@ interface CommentThreadProps {
 	targetLines?: string;
 	/** Revision number where comment originated (for provenance) */
 	originalRevisionNumber?: number | null;
+	/** Called when clicking the comment body to navigate to the target line */
+	onNavigate?: () => void;
 }
 
 export default function CommentThread({
@@ -67,6 +69,7 @@ export default function CommentThread({
 	canInteract = true,
 	targetLines,
 	originalRevisionNumber,
+	onNavigate,
 }: CommentThreadProps) {
 	const router = useRouter();
 	const [expanded, setExpanded] = useState(!comment.resolved);
@@ -178,13 +181,20 @@ export default function CommentThread({
 
 	return (
 		<div
-			className={`island-shell rounded-xl p-3 ${
+			className={`island-shell rounded-xl p-3 ${onNavigate ? "cursor-pointer" : ""} ${
 				comment.resolved
 					? "opacity-60"
 					: comment.outdated
 						? "border-l-2 border-l-amber-400 opacity-75"
 						: ""
 			}`}
+			onClick={(e) => {
+				if (!onNavigate) return;
+				// Don't navigate when clicking interactive elements inside the comment
+				const target = e.target as HTMLElement;
+				if (target.closest("button, a, textarea, input")) return;
+				onNavigate();
+			}}
 		>
 			{/* Main comment */}
 			<div className="mb-2 flex items-start gap-2">

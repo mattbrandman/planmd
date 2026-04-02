@@ -25,6 +25,7 @@ import {
 import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import {
@@ -84,7 +85,7 @@ const STATUS_CONFIG = {
 type PlanStatus = keyof typeof STATUS_CONFIG;
 
 const REMARK_PLUGINS = [remarkGfm];
-const REHYPE_PLUGINS = [rehypeSlug];
+const REHYPE_PLUGINS = [rehypeSlug, rehypeHighlight];
 
 type ViewMode = "rendered" | "source";
 
@@ -1549,6 +1550,7 @@ export default function PlanDetailPage({
 													originalRevisionNumber={getOriginalRevisionNumber(
 														comment,
 													)}
+													onNavigate={() => handleCommentLineClick(comment)}
 												/>
 											</div>
 										))}

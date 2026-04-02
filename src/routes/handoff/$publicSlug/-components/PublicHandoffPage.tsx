@@ -8,6 +8,7 @@ import {
 	Workflow,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { HandoffPayload } from "#/common/lib/handoff";
 import { Alert } from "#/common/components/ui/alert";
@@ -137,7 +138,7 @@ export default function PublicHandoffPage({
 							</h2>
 						</div>
 						<div className="prose prose-sm max-w-none">
-							<ReactMarkdown remarkPlugins={[remarkGfm]}>
+							<ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
 								{payload.markdown}
 							</ReactMarkdown>
 						</div>

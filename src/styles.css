@@ -285,6 +285,76 @@ pre code {
   color: #e8efff;
 }
 
+/* ── Syntax highlighting (rehype-highlight / highlight.js) ──────────────────── */
+
+.hljs-comment,
+.hljs-quote {
+  color: #6b8a9e;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag {
+  color: #c792ea;
+}
+
+.hljs-string,
+.hljs-addition {
+  color: #c3e88d;
+}
+
+.hljs-number,
+.hljs-literal {
+  color: #f78c6c;
+}
+
+.hljs-built_in,
+.hljs-type,
+.hljs-params {
+  color: #ffcb6b;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-attr {
+  color: #82aaff;
+}
+
+.hljs-name,
+.hljs-tag {
+  color: #f07178;
+}
+
+.hljs-variable,
+.hljs-template-variable {
+  color: #addb67;
+}
+
+.hljs-deletion {
+  color: #ff5370;
+}
+
+.hljs-meta {
+  color: #89ddff;
+}
+
+.hljs-symbol,
+.hljs-bullet {
+  color: #89ddff;
+}
+
+.hljs-regexp {
+  color: #5ca7e4;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
 /* Dark mode prose overrides — ensure readable text on dark surfaces */
 .dark .prose {
   --tw-prose-body: #c8ddd8;
