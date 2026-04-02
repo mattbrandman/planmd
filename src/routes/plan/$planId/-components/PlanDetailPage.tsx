@@ -933,7 +933,7 @@ export default function PlanDetailPage({
 	// unrelated state changes (comment draft typing, hover, etc.).
 	const markdownComponents = useMemo(() => {
 		const blockWrapper =
-			(tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr") =>
+			(tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr" | "h4" | "h5" | "h6") =>
 			// biome-ignore lint/suspicious/noExplicitAny: react-markdown component props
 			({ node, children, ...rest }: any) => (
 				<BlockCommentWrapper
@@ -966,6 +966,9 @@ export default function PlanDetailPage({
 			h1: sectionHeading(1),
 			h2: sectionHeading(2),
 			h3: sectionHeading(3),
+			h4: blockWrapper("h4"),
+			h5: blockWrapper("h5"),
+			h6: blockWrapper("h6"),
 			p: blockWrapper("p"),
 			ul: blockWrapper("ul"),
 			ol: blockWrapper("ol"),
@@ -1617,7 +1620,7 @@ function SectionHeading({
 }) {
 	const props = {
 		id,
-		className: "group",
+		className: "group relative -mr-8 pr-12",
 		children: (
 			<>
 				{children}
@@ -1646,7 +1649,7 @@ function BlockCommentWrapper({
 	...props
 }: {
 	node?: { position?: { start: { line: number }; end: { line: number } } };
-	tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr";
+	tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr" | "h4" | "h5" | "h6";
 	canComment: boolean;
 	onLineSelect: (
 		range: { start: number; end: number },
@@ -1699,12 +1702,12 @@ function BlockCommentWrapper({
 		// biome-ignore lint/a11y/useKeyboardHandler: click-to-comment affordance, not a semantic control
 		<div
 			onClick={handleClick}
-			className="-mx-2 cursor-pointer rounded-lg px-2 pr-10 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
+			className="-ml-3 -mr-8 cursor-pointer rounded-lg pl-3 pr-12 transition-colors group/block relative hover:bg-[var(--lagoon)]/[0.04] dark:hover:bg-[var(--lagoon)]/[0.08]"
 		>
 			<Tag {...props}>{children}</Tag>
-			<span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/block:opacity-100">
-				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm">
-					<MessageSquare className="h-3 w-3" />
+			<span className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/block:opacity-100">
+				<span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] shadow-sm">
+					<MessageSquare className="h-3.5 w-3.5" />
 				</span>
 			</span>
 		</div>

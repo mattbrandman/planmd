@@ -20,10 +20,10 @@ export default function SectionCommentButton({
 				e.stopPropagation();
 				onClick();
 			}}
-			className="ml-3 inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 align-middle text-xs font-medium text-[var(--sea-ink-soft)] opacity-0 shadow-sm transition-all hover:border-[var(--lagoon)] hover:text-[var(--lagoon-deep)] group-hover:opacity-100 focus:opacity-100"
+			className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--sea-ink-soft)] opacity-0 shadow-sm transition-all hover:border-[var(--lagoon)] hover:text-[var(--lagoon-deep)] group-hover:opacity-100 focus:opacity-100"
 			aria-label="Add comment on this section"
 		>
-			<MessageSquare className="h-3 w-3" />
+			<MessageSquare className="h-3.5 w-3.5" />
 			{count > 0 && count}
 		</button>
 	);
