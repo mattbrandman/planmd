@@ -1,5 +1,4 @@
 import { MessageSquare } from "lucide-react";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export interface LineRange {
@@ -19,8 +18,6 @@ interface LineNumberedContentProps {
 	commentedLines: LineComment[];
 	highlightedLines: LineRange | null;
 	onVisibleRangeChange?: (range: LineRange) => void;
-	/** Rendered inside the first selected line row to anchor the Popover */
-	popoverAnchor?: ReactNode;
 }
 
 /**
@@ -33,7 +30,6 @@ export default function LineNumberedContent({
 	commentedLines,
 	highlightedLines,
 	onVisibleRangeChange,
-	popoverAnchor,
 }: LineNumberedContentProps) {
 	const lines = useMemo(() => content.split("\n"), [content]);
 
@@ -215,20 +211,14 @@ export default function LineNumberedContent({
 					bgClass = "line-commented";
 				}
 
-				const isAnchorLine =
-					selectedLines != null && lineNum === selectedLines.start;
-
 				return (
 					// biome-ignore lint/a11y/useKeyboardHandler: line gutter button handles keyboard
 					<div
 						key={lineNum}
 						data-line={lineNum}
-						className={`line-row group relative cursor-pointer ${bgClass}`}
+						className={`line-row group cursor-pointer ${bgClass}`}
 						onClick={(e) => handleLineClick(lineNum, e.shiftKey)}
 					>
-						{/* Popover anchor placed on the first selected line */}
-						{isAnchorLine && popoverAnchor}
-
 						{/* Gutter */}
 						<button
 							type="button"

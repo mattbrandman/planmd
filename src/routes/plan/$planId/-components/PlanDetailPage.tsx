@@ -38,17 +38,13 @@ import {
 import { addComment, submitReview, updatePlanStatus } from "#/common/api/plans";
 import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
-import {
-	Popover,
-	PopoverAnchor,
-	PopoverContent,
-} from "#/common/components/ui/popover";
 import { Textarea } from "#/common/components/ui/textarea";
 
 import CommentThread from "./CommentThread";
 import ConsensusBar from "./ConsensusBar";
 import FloatingComposer from "./FloatingComposer";
 import type { LineRange } from "./LineNumberedContent";
+import SectionComposer from "./SectionComposer";
 import LineNumberedContent from "./LineNumberedContent";
 import RevisionEditor from "./RevisionEditor";
 import SectionCommentButton from "./SectionCommentButton";
@@ -287,9 +283,58 @@ export default function PlanDetailPage({
 	const [generalComposing, setGeneralComposing] = useState(false);
 	const [commentError, setCommentError] = useState<string | null>(null);
 
+	const wrapperRef = useRef<HTMLDivElement>(null);
+	const articleRef = useRef<HTMLElement>(null);
+	const composerRef = useRef<HTMLDivElement>(null);
+	const [composerTop, setComposerTop] = useState(0);
+	const composerOpen =
+		selectedLines !== null || activeSection !== null;
+
+	// Compute vertical offset for the floating composer relative to the wrapper.
+	// Accepts a CSS selector (resolved inside articleRef) or a DOM element directly.
+	const positionComposerAt = useCallback((target: string | Element) => {
+		if (!wrapperRef.current) return;
+		const el =
+			typeof target === "string"
+				? articleRef.current?.querySelector(target)
+				: target;
+		if (!el) return;
+		const wrapperRect = wrapperRef.current.getBoundingClientRect();
+		const targetRect = el.getBoundingClientRect();
+		setComposerTop(targetRect.top - wrapperRect.top);
+	}, []);
+
 	const dismissComposer = useCallback(() => {
 		setSelectedLines(null);
+		setActiveSection(null);
 	}, []);
+
+	// Dismiss floating composer on Escape
+	useEffect(() => {
+		if (!composerOpen) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				dismissComposer();
+			}
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, [composerOpen, dismissComposer]);
+
+	// Dismiss floating composer on click outside article + composer
+	useEffect(() => {
+		if (!composerOpen) return;
+		const handlePointerDown = (e: PointerEvent) => {
+			const target = e.target as Node;
+			if (composerRef.current?.contains(target)) return;
+			if (articleRef.current?.contains(target)) return;
+			dismissComposer();
+		};
+		document.addEventListener("pointerdown", handlePointerDown);
+		return () =>
+			document.removeEventListener("pointerdown", handlePointerDown);
+	}, [composerOpen, dismissComposer]);
 
 	// Regeneration request polling
 	type RegenRequest = Awaited<
@@ -692,35 +737,37 @@ export default function PlanDetailPage({
 		(r) => r.status === "detected" || r.status === "generating",
 	);
 
-	async function handleAddSectionComment(sectionId: string | null) {
-		if (!canComment) {
-			setCommentError("Sign in to comment on this plan.");
-			return;
-		}
-		if (!commentDraft.trim() || !latestRevision) return;
-		setSubmittingComment(true);
-		setCommentError(null);
-		try {
-			await addComment({
-				data: {
-					planId: plan.id,
-					revisionId: latestRevision.id,
-					sectionId,
-					startLine: null,
-					endLine: null,
-					parentId: null,
-					body: commentDraft.trim(),
-				},
-			});
-			setCommentDraft("");
-			setActiveSection(null);
-			router.invalidate();
-		} catch (err) {
-			setCommentError(getActionError(err, "Failed to post comment"));
-		} finally {
-			setSubmittingComment(false);
-		}
-	}
+	const handleAddSectionComment = useCallback(
+		async (sectionId: string | null, body: string) => {
+			if (!canComment) {
+				setCommentError("Sign in to comment on this plan.");
+				return;
+			}
+			if (!latestRevision) return;
+			setSubmittingComment(true);
+			setCommentError(null);
+			try {
+				await addComment({
+					data: {
+						planId: plan.id,
+						revisionId: latestRevision.id,
+						sectionId,
+						startLine: null,
+						endLine: null,
+						parentId: null,
+						body,
+					},
+				});
+				setActiveSection(null);
+				router.invalidate();
+			} catch (err) {
+				setCommentError(getActionError(err, "Failed to post comment"));
+			} finally {
+				setSubmittingComment(false);
+			}
+		},
+		[canComment, latestRevision, plan.id, router],
+	);
 
 	async function handleAddGeneralComment() {
 		if (!canComment) {
@@ -795,8 +842,9 @@ export default function PlanDetailPage({
 	);
 
 	const handleLineSelect = useCallback(
-		(range: LineRange, selectedText?: string) => {
+		(range: LineRange, selectedText?: string, anchorEl?: Element) => {
 			if (!canComment) return;
+			positionComposerAt(anchorEl ?? `[data-line="${range.start}"]`);
 			setCommentError(null);
 			setSelectedLines(range);
 			setActiveSection(null);
@@ -814,7 +862,7 @@ export default function PlanDetailPage({
 				dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
 			});
 		},
-		[canComment, contentLines, recordPlanInteraction, viewMode],
+		[canComment, contentLines, positionComposerAt, recordPlanInteraction, viewMode],
 	);
 
 	function handleCommentLineClick(comment: {
@@ -864,7 +912,11 @@ export default function PlanDetailPage({
 
 	const handleSectionFocus = useCallback(
 		(sectionId: string | null) => {
+			if (sectionId) {
+				positionComposerAt(`#${CSS.escape(sectionId)}`);
+			}
 			setCommentError(null);
+			setSelectedLines(null);
 			setActiveSection(sectionId);
 			recordPlanInteraction({
 				kind: "section_focus",
@@ -874,7 +926,7 @@ export default function PlanDetailPage({
 				dedupeKey: `section:${sectionId ?? "top"}:${viewMode}`,
 			});
 		},
-		[recordPlanInteraction, viewMode],
+		[positionComposerAt, recordPlanInteraction, viewMode],
 	);
 
 	// Memoize ReactMarkdown components to avoid re-rendering every block on
@@ -1051,10 +1103,7 @@ export default function PlanDetailPage({
 						<div className="inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--surface)]">
 							<button
 								type="button"
-								onClick={() => {
-									setViewMode("rendered");
-									setSelectedLines(null);
-								}}
+								onClick={() => setViewMode("rendered")}
 								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
 									viewMode === "rendered"
 										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
@@ -1232,14 +1281,10 @@ export default function PlanDetailPage({
 				<>
 					{/* Main content + comment sidebar */}
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
-						{/* Content area */}
-						<Popover
-							open={selectedLines !== null && viewMode === "source"}
-							onOpenChange={(open) => {
-								if (!open) dismissComposer();
-							}}
-						>
+						{/* Content area + floating composer */}
+						<div ref={wrapperRef} className="relative">
 							<article
+								ref={articleRef}
 								className="island-shell plan-content-card rise-in min-w-0 rounded-2xl p-8 sm:p-10"
 								style={{ animationDelay: "120ms" }}
 							>
@@ -1258,36 +1303,39 @@ export default function PlanDetailPage({
 										commentedLines={lineComments}
 										highlightedLines={highlightedLines}
 										onVisibleRangeChange={handleVisibleRangeChange}
-										popoverAnchor={
-											selectedLines ? (
-												<PopoverAnchor className="pointer-events-none absolute right-0 h-0 w-0" />
-											) : null
-										}
 									/>
 								)}
 							</article>
 
-							{selectedLines !== null && viewMode === "source" && (
-								<PopoverContent
-									side="right"
-									align="start"
-									sideOffset={20}
-									collisionPadding={16}
-									className="floating-composer w-80"
-									onOpenAutoFocus={(e) => e.preventDefault()}
+							{composerOpen && (
+								<div
+									ref={composerRef}
+									className="floating-composer absolute left-full z-50 ml-5 w-80 rounded-xl border p-4"
+									style={{ top: composerTop }}
 								>
-									<FloatingComposer
-										selectedLines={selectedLines}
-										initialSuggestion={contentLines
-											.slice(selectedLines.start - 1, selectedLines.end)
-											.join("\n")}
-										submitting={submittingComment}
-										onSubmit={handleAddLineComment}
-										onCancel={dismissComposer}
-									/>
-								</PopoverContent>
+									{selectedLines ? (
+										<FloatingComposer
+											selectedLines={selectedLines}
+											initialSuggestion={contentLines
+												.slice(selectedLines.start - 1, selectedLines.end)
+												.join("\n")}
+											submitting={submittingComment}
+											onSubmit={handleAddLineComment}
+											onCancel={dismissComposer}
+										/>
+									) : activeSection !== null ? (
+										<SectionComposer
+											sectionId={activeSection}
+											submitting={submittingComment}
+											onSubmit={(body) =>
+												handleAddSectionComment(activeSection, body)
+											}
+											onCancel={dismissComposer}
+										/>
+									) : null}
+								</div>
 							)}
-						</Popover>
+						</div>
 
 						{/* Comment sidebar */}
 						<aside className="rise-in" style={{ animationDelay: "180ms" }}>
@@ -1394,49 +1442,6 @@ export default function PlanDetailPage({
 												variant="ghost"
 												onClick={() => {
 													setGeneralComposing(false);
-													setCommentDraft("");
-												}}
-												className="rounded-full"
-											>
-												Cancel
-											</Button>
-										</div>
-									</div>
-								)}
-
-								{/* Section-level comment composer */}
-								{activeSection !== null && (
-									<div className="island-shell rounded-2xl p-4">
-										<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
-											Comment on{" "}
-											<span className="font-mono text-[var(--lagoon-deep)]">
-												#{activeSection || "top"}
-											</span>
-										</h3>
-										<Textarea
-											value={commentDraft}
-											onChange={(e) => setCommentDraft(e.target.value)}
-											placeholder="Share your thoughts on this section..."
-											rows={3}
-											className="mb-2 resize-none rounded-xl text-sm"
-											autoFocus
-										/>
-										<div className="flex gap-2">
-											<Button
-												size="sm"
-												variant="brand"
-												onClick={() => handleAddSectionComment(activeSection)}
-												disabled={!commentDraft.trim() || submittingComment}
-												className="rounded-full"
-											>
-												<Send className="mr-1.5 h-3 w-3" />
-												{submittingComment ? "Posting..." : "Comment"}
-											</Button>
-											<Button
-												size="sm"
-												variant="ghost"
-												onClick={() => {
-													setActiveSection(null);
 													setCommentDraft("");
 												}}
 												className="rounded-full"
@@ -1643,7 +1648,11 @@ function BlockCommentWrapper({
 	node?: { position?: { start: { line: number }; end: { line: number } } };
 	tag: "p" | "ul" | "ol" | "blockquote" | "pre" | "table" | "hr";
 	canComment: boolean;
-	onLineSelect: (range: { start: number; end: number }) => void;
+	onLineSelect: (
+		range: { start: number; end: number },
+		selectedText?: string,
+		anchorEl?: Element,
+	) => void;
 	children?: ReactNode;
 	[key: string]: unknown;
 }) {
@@ -1657,7 +1666,11 @@ function BlockCommentWrapper({
 	const handleClick = (event: MouseEvent<HTMLDivElement>) => {
 		const target = event.target as HTMLElement | null;
 		if (!target) {
-			onLineSelect({ start: startLine, end: endLine ?? startLine });
+			onLineSelect(
+				{ start: startLine, end: endLine ?? startLine },
+				undefined,
+				event.currentTarget,
+			);
 			return;
 		}
 
@@ -1675,7 +1688,11 @@ function BlockCommentWrapper({
 			return;
 		}
 
-		onLineSelect({ start: startLine, end: endLine ?? startLine });
+		onLineSelect(
+			{ start: startLine, end: endLine ?? startLine },
+			undefined,
+			event.currentTarget,
+		);
 	};
 
 	return (
