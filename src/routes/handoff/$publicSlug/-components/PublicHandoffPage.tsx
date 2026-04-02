@@ -10,6 +10,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HandoffPayload } from "#/common/lib/handoff";
+import { Alert } from "#/common/components/ui/alert";
 import { Badge } from "#/common/components/ui/badge";
 
 interface PublicHandoffPageProps {
@@ -103,7 +104,7 @@ export default function PublicHandoffPage({
 						</div>
 
 						{!snapshot.isLatestPublished && (
-							<div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+							<Alert className="mt-4 rounded-xl border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
 								<div className="flex items-start gap-2">
 									<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 									<div>
@@ -124,7 +125,7 @@ export default function PublicHandoffPage({
 										)}
 									</div>
 								</div>
-							</div>
+							</Alert>
 						)}
 					</header>
 

@@ -12,7 +12,7 @@ import {
 	EyeOff,
 	FileText,
 	History,
-	Lightbulb,
+
 	Loader2,
 	MessageSquare,
 	Pencil,
@@ -36,10 +36,18 @@ import {
 	updateRegeneration,
 } from "#/common/api/collaboration";
 import { addComment, submitReview, updatePlanStatus } from "#/common/api/plans";
+import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
+import {
+	Popover,
+	PopoverAnchor,
+	PopoverContent,
+} from "#/common/components/ui/popover";
 import { Textarea } from "#/common/components/ui/textarea";
+
 import CommentThread from "./CommentThread";
 import ConsensusBar from "./ConsensusBar";
+import FloatingComposer from "./FloatingComposer";
 import type { LineRange } from "./LineNumberedContent";
 import LineNumberedContent from "./LineNumberedContent";
 import RevisionEditor from "./RevisionEditor";
@@ -83,7 +91,7 @@ const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeSlug];
 
 type ViewMode = "rendered" | "source";
-type ComposerMode = "comment" | "suggest";
+
 
 interface CommentData {
 	id: string;
@@ -276,10 +284,12 @@ export default function PlanDetailPage({
 	const [commentDraft, setCommentDraft] = useState("");
 	const [submittingComment, setSubmittingComment] = useState(false);
 	const [showOutdated, setShowOutdated] = useState(true);
-	const [composerMode, setComposerMode] = useState<ComposerMode>("comment");
-	const [suggestionContent, setSuggestionContent] = useState("");
 	const [generalComposing, setGeneralComposing] = useState(false);
 	const [commentError, setCommentError] = useState<string | null>(null);
+
+	const dismissComposer = useCallback(() => {
+		setSelectedLines(null);
+	}, []);
 
 	// Regeneration request polling
 	type RegenRequest = Awaited<
@@ -742,45 +752,47 @@ export default function PlanDetailPage({
 		}
 	}
 
-	async function handleAddLineComment() {
-		if (!canComment) {
-			setCommentError("Sign in to comment on this plan.");
-			return;
-		}
-		if (!commentDraft.trim() || !latestRevision || !selectedLines) return;
-		setSubmittingComment(true);
-		setCommentError(null);
+	const handleAddLineComment = useCallback(
+		async (
+			body: string,
+			mode: "comment" | "suggest",
+			suggestion: string | null,
+		) => {
+			if (!canComment) {
+				setCommentError("Sign in to comment on this plan.");
+				return;
+			}
+			if (!latestRevision || !selectedLines) return;
+			setSubmittingComment(true);
+			setCommentError(null);
 
-		const isSuggestion = composerMode === "suggest" && suggestionContent.trim();
-
-		try {
-			await addComment({
-				data: {
-					planId: plan.id,
-					revisionId: latestRevision.id,
-					sectionId: null,
-					startLine: selectedLines.start,
-					endLine:
-						selectedLines.end !== selectedLines.start
-							? selectedLines.end
-							: null,
-					parentId: null,
-					body: commentDraft.trim(),
-					suggestionType: isSuggestion ? "replace" : null,
-					suggestionContent: isSuggestion ? suggestionContent : null,
-				},
-			});
-			setCommentDraft("");
-			setSuggestionContent("");
-			setSelectedLines(null);
-			setComposerMode("comment");
-			router.invalidate();
-		} catch (err) {
-			setCommentError(getActionError(err, "Failed to post comment"));
-		} finally {
-			setSubmittingComment(false);
-		}
-	}
+			try {
+				await addComment({
+					data: {
+						planId: plan.id,
+						revisionId: latestRevision.id,
+						sectionId: null,
+						startLine: selectedLines.start,
+						endLine:
+							selectedLines.end !== selectedLines.start
+								? selectedLines.end
+								: null,
+						parentId: null,
+						body,
+						suggestionType: suggestion ? (mode as "replace") : null,
+						suggestionContent: suggestion,
+					},
+				});
+				setSelectedLines(null);
+				router.invalidate();
+			} catch (err) {
+				setCommentError(getActionError(err, "Failed to post comment"));
+			} finally {
+				setSubmittingComment(false);
+			}
+		},
+		[canComment, latestRevision, selectedLines, plan.id, router],
+	);
 
 	const handleLineSelect = useCallback(
 		(range: LineRange, selectedText?: string) => {
@@ -801,10 +813,6 @@ export default function PlanDetailPage({
 				selectedText: text,
 				dedupeKey: `line-select:${range.start}-${range.end}:${viewMode}`,
 			});
-			// Pre-fill suggestion content with selected lines
-			setSuggestionContent(
-				contentLines.slice(range.start - 1, range.end).join("\n"),
-			);
 		},
 		[canComment, contentLines, recordPlanInteraction, viewMode],
 	);
@@ -1043,7 +1051,10 @@ export default function PlanDetailPage({
 						<div className="inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--surface)]">
 							<button
 								type="button"
-								onClick={() => setViewMode("rendered")}
+								onClick={() => {
+									setViewMode("rendered");
+									setSelectedLines(null);
+								}}
 								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
 									viewMode === "rendered"
 										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
@@ -1147,9 +1158,9 @@ export default function PlanDetailPage({
 				)}
 
 				{sessionError && (
-					<div className="border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+					<Alert variant="destructive" className="border-t border-red-200 bg-red-50 px-4 py-2 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
 						{sessionError}
-					</div>
+					</Alert>
 				)}
 			</div>
 
@@ -1222,28 +1233,61 @@ export default function PlanDetailPage({
 					{/* Main content + comment sidebar */}
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
 						{/* Content area */}
-						<article
-							className="island-shell plan-content-card rise-in min-w-0 rounded-2xl p-8 sm:p-10"
-							style={{ animationDelay: "120ms" }}
+						<Popover
+							open={selectedLines !== null && viewMode === "source"}
+							onOpenChange={(open) => {
+								if (!open) dismissComposer();
+							}}
 						>
-							{viewMode === "rendered" ? (
-								<div
-									ref={renderedProseRef}
-									className="prose prose-neutral max-w-none dark:prose-invert plan-prose"
+							<article
+								className="island-shell plan-content-card rise-in min-w-0 rounded-2xl p-8 sm:p-10"
+								style={{ animationDelay: "120ms" }}
+							>
+								{viewMode === "rendered" ? (
+									<div
+										ref={renderedProseRef}
+										className="prose prose-neutral max-w-none dark:prose-invert plan-prose"
+									>
+										{renderedMarkdown}
+									</div>
+								) : (
+									<LineNumberedContent
+										content={content}
+										onLineSelect={handleLineSelect}
+										selectedLines={selectedLines}
+										commentedLines={lineComments}
+										highlightedLines={highlightedLines}
+										onVisibleRangeChange={handleVisibleRangeChange}
+										popoverAnchor={
+											selectedLines ? (
+												<PopoverAnchor className="pointer-events-none absolute right-0 h-0 w-0" />
+											) : null
+										}
+									/>
+								)}
+							</article>
+
+							{selectedLines !== null && viewMode === "source" && (
+								<PopoverContent
+									side="right"
+									align="start"
+									sideOffset={20}
+									collisionPadding={16}
+									className="floating-composer w-80"
+									onOpenAutoFocus={(e) => e.preventDefault()}
 								>
-									{renderedMarkdown}
-								</div>
-							) : (
-								<LineNumberedContent
-									content={content}
-									onLineSelect={handleLineSelect}
-									selectedLines={selectedLines}
-									commentedLines={lineComments}
-									highlightedLines={highlightedLines}
-									onVisibleRangeChange={handleVisibleRangeChange}
-								/>
+									<FloatingComposer
+										selectedLines={selectedLines}
+										initialSuggestion={contentLines
+											.slice(selectedLines.start - 1, selectedLines.end)
+											.join("\n")}
+										submitting={submittingComment}
+										onSubmit={handleAddLineComment}
+										onCancel={dismissComposer}
+									/>
+								</PopoverContent>
 							)}
-						</article>
+						</Popover>
 
 						{/* Comment sidebar */}
 						<aside className="rise-in" style={{ animationDelay: "180ms" }}>
@@ -1315,9 +1359,9 @@ export default function PlanDetailPage({
 									))}
 
 								{commentError && (
-									<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+									<Alert variant="destructive" className="rounded-xl border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
 										{commentError}
-									</div>
+									</Alert>
 								)}
 
 								{/* General comment composer */}
@@ -1351,111 +1395,6 @@ export default function PlanDetailPage({
 												onClick={() => {
 													setGeneralComposing(false);
 													setCommentDraft("");
-												}}
-												className="rounded-full"
-											>
-												Cancel
-											</Button>
-										</div>
-									</div>
-								)}
-
-								{/* Line-level comment composer */}
-								{selectedLines !== null && (
-									<div className="island-shell rounded-2xl p-4">
-										<h3 className="mb-2 text-sm font-semibold text-[var(--sea-ink)]">
-											{composerMode === "suggest"
-												? "Suggest change on"
-												: "Comment on"}{" "}
-											<span className="line-badge">
-												{selectedLines.start === selectedLines.end
-													? `L${selectedLines.start}`
-													: `L${selectedLines.start}-${selectedLines.end}`}
-											</span>
-										</h3>
-
-										{/* Comment / Suggest toggle */}
-										<div className="mb-2 flex gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5">
-											<button
-												type="button"
-												onClick={() => setComposerMode("comment")}
-												className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-													composerMode === "comment"
-														? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-														: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-												}`}
-											>
-												<MessageSquare className="h-3 w-3" />
-												Comment
-											</button>
-											<button
-												type="button"
-												onClick={() => setComposerMode("suggest")}
-												className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-													composerMode === "suggest"
-														? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-														: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-												}`}
-											>
-												<Lightbulb className="h-3 w-3" />
-												Suggest
-											</button>
-										</div>
-
-										{/* Suggestion editor */}
-										{composerMode === "suggest" && (
-											<div className="mb-2">
-												<label
-													htmlFor="suggestion-content"
-													className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[var(--sea-ink-soft)]"
-												>
-													Proposed change
-												</label>
-												<Textarea
-													id="suggestion-content"
-													value={suggestionContent}
-													onChange={(e) => setSuggestionContent(e.target.value)}
-													rows={4}
-													className="resize-y rounded-xl border-[var(--line)] bg-[var(--surface)] font-mono text-xs"
-												/>
-											</div>
-										)}
-
-										<Textarea
-											value={commentDraft}
-											onChange={(e) => setCommentDraft(e.target.value)}
-											placeholder={
-												composerMode === "suggest"
-													? "Explain your suggestion..."
-													: "Share your thoughts on these lines..."
-											}
-											rows={3}
-											className="mb-2 resize-none rounded-xl text-sm"
-											autoFocus
-										/>
-										<div className="flex gap-2">
-											<Button
-												size="sm"
-												variant="brand"
-												onClick={handleAddLineComment}
-												disabled={!commentDraft.trim() || submittingComment}
-												className="rounded-full"
-											>
-												<Send className="mr-1.5 h-3 w-3" />
-												{submittingComment
-													? "Posting..."
-													: composerMode === "suggest"
-														? "Suggest"
-														: "Comment"}
-											</Button>
-											<Button
-												size="sm"
-												variant="ghost"
-												onClick={() => {
-													setSelectedLines(null);
-													setCommentDraft("");
-													setSuggestionContent("");
-													setComposerMode("comment");
 												}}
 												className="rounded-full"
 											>

@@ -17,6 +17,7 @@ import {
 	applySuggestion,
 	toggleCommentResolved,
 } from "#/common/api/plans";
+import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
 import { Textarea } from "#/common/components/ui/textarea";
 import type { ContextSnapshot } from "#/common/lib/diff";
@@ -359,9 +360,9 @@ export default function CommentThread({
 			)}
 
 			{error && (
-				<div className="mt-2 ml-8 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+				<Alert variant="destructive" className="mt-2 ml-8 rounded-lg border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
 					{error}
-				</div>
+				</Alert>
 			)}
 
 			{/* Reply composer */}

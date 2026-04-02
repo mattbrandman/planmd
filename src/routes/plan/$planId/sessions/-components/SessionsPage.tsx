@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import {
 	ArrowLeft,
-	ChevronDown,
 	CircleAlert,
 	FileCode2,
 	Link2,
@@ -9,7 +8,18 @@ import {
 	Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "#/common/components/ui/accordion";
+import { Alert } from "#/common/components/ui/alert";
 import { Badge } from "#/common/components/ui/badge";
+import {
+	ToggleGroup,
+	ToggleGroupItem,
+} from "#/common/components/ui/toggle-group";
 import {
 	type WovenEvidenceItem,
 	weaveSessionEvidence,
@@ -139,10 +149,7 @@ export default function SessionsPage({
 }: SessionsPageProps) {
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [searchQuery, setSearchQuery] = useState("");
-	const [expandedSessionId, setExpandedSessionId] = useState<string | null>(
-		null,
-	);
-	const [handoffsExpanded, setHandoffsExpanded] = useState(false);
+	const [expandedSessionId, setExpandedSessionId] = useState<string>("");
 
 	const filteredSessions = useMemo(() => {
 		let filtered = sessions;
@@ -223,22 +230,33 @@ export default function SessionsPage({
 				className="rise-in mb-6 flex flex-wrap items-center gap-3"
 				style={{ animationDelay: "60ms" }}
 			>
-				<div className="flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-1">
-					{(["all", "live", "ended"] as const).map((status) => (
-						<button
-							key={status}
-							type="button"
-							onClick={() => setStatusFilter(status)}
-							className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-								statusFilter === status
-									? "bg-white text-[var(--sea-ink)] shadow-sm dark:bg-[var(--surface-strong)]"
-									: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
-							}`}
-						>
-							{status === "all" ? "All" : status === "live" ? "Live" : "Ended"}
-						</button>
-					))}
-				</div>
+				<ToggleGroup
+					type="single"
+					value={statusFilter}
+					onValueChange={(v) => {
+						if (v) setStatusFilter(v as StatusFilter);
+					}}
+					className="rounded-full border border-[var(--line)] bg-[var(--surface)] p-1"
+				>
+					<ToggleGroupItem
+						value="all"
+						className="rounded-full px-3 py-1 text-sm data-[state=on]:bg-white data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm dark:data-[state=on]:bg-[var(--surface-strong)]"
+					>
+						All
+					</ToggleGroupItem>
+					<ToggleGroupItem
+						value="live"
+						className="rounded-full px-3 py-1 text-sm data-[state=on]:bg-white data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm dark:data-[state=on]:bg-[var(--surface-strong)]"
+					>
+						Live
+					</ToggleGroupItem>
+					<ToggleGroupItem
+						value="ended"
+						className="rounded-full px-3 py-1 text-sm data-[state=on]:bg-white data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm dark:data-[state=on]:bg-[var(--surface-strong)]"
+					>
+						Ended
+					</ToggleGroupItem>
+				</ToggleGroup>
 
 				<div className="relative">
 					<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--sea-ink-soft)]" />
@@ -269,57 +287,45 @@ export default function SessionsPage({
 						</p>
 					</div>
 				) : (
-					filteredSessions.map((bundle) => (
-						<SessionCard
-							key={bundle.session.id}
-							bundle={bundle}
-							expanded={expandedSessionId === bundle.session.id}
-							onToggle={() =>
-								setExpandedSessionId(
-									expandedSessionId === bundle.session.id
-										? null
-										: bundle.session.id,
-								)
-							}
-						/>
-					))
+					<Accordion
+						type="single"
+						collapsible
+						value={expandedSessionId}
+						onValueChange={(value) => setExpandedSessionId(value)}
+					>
+						{filteredSessions.map((bundle) => (
+							<SessionCard key={bundle.session.id} bundle={bundle} />
+						))}
+					</Accordion>
 				)}
 			</div>
 
 			{/* Handoff snapshots */}
 			{snapshots.length > 0 && (
 				<section className="rise-in mt-8" style={{ animationDelay: "180ms" }}>
-					<button
-						type="button"
-						onClick={() => setHandoffsExpanded(!handoffsExpanded)}
-						className="mb-4 flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-5 py-4 text-left transition hover:border-[var(--lagoon)]"
-					>
-						<div className="flex items-center gap-3">
-							<FileCode2 className="h-4 w-4 text-[var(--lagoon)]" />
-							<div>
-								<p className="text-sm font-semibold text-[var(--sea-ink)]">
-									Handoff Snapshots
-								</p>
-								<p className="text-xs text-[var(--sea-ink-soft)]">
-									{snapshots.length} published snapshot
-									{snapshots.length !== 1 && "s"}
-								</p>
-							</div>
-						</div>
-						<ChevronDown
-							className={`h-4 w-4 text-[var(--sea-ink-soft)] transition-transform duration-200 ${
-								handoffsExpanded ? "rotate-0" : "-rotate-90"
-							}`}
-						/>
-					</button>
-
-					{handoffsExpanded && (
-						<div className="space-y-3">
-							{snapshots.map((snapshot) => (
-								<SnapshotCard key={snapshot.id} snapshot={snapshot} />
-							))}
-						</div>
-					)}
+					<Accordion type="single" collapsible>
+						<AccordionItem value="handoffs" className="border-b-0">
+							<AccordionTrigger className="mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-5 py-4 text-left transition hover:no-underline hover:border-[var(--lagoon)]">
+								<div className="flex items-center gap-3">
+									<FileCode2 className="h-4 w-4 text-[var(--lagoon)]" />
+									<div>
+										<p className="text-sm font-semibold text-[var(--sea-ink)]">
+											Handoff Snapshots
+										</p>
+										<p className="text-xs text-[var(--sea-ink-soft)]">
+											{snapshots.length} published snapshot
+											{snapshots.length !== 1 && "s"}
+										</p>
+									</div>
+								</div>
+							</AccordionTrigger>
+							<AccordionContent className="space-y-3">
+								{snapshots.map((snapshot) => (
+									<SnapshotCard key={snapshot.id} snapshot={snapshot} />
+								))}
+							</AccordionContent>
+						</AccordionItem>
+					</Accordion>
 				</section>
 			)}
 		</main>
@@ -328,30 +334,20 @@ export default function SessionsPage({
 
 // ── Session card ──────────────────────────────────────────────────────────────
 
-function SessionCard({
-	bundle,
-	expanded,
-	onToggle,
-}: {
-	bundle: SessionBundle;
-	expanded: boolean;
-	onToggle: () => void;
-}) {
+function SessionCard({ bundle }: { bundle: SessionBundle }) {
 	const { session, transcriptChunks, contextEvents, attentionItems } = bundle;
 	const isLive = session.status === "live";
 
 	const timeline = useMemo<WovenEvidenceItem[]>(() => {
-		if (!expanded) return [];
 		return weaveSessionEvidence(bundle).slice().reverse();
-	}, [expanded, bundle]);
+	}, [bundle]);
 
 	return (
-		<div className="island-shell rounded-2xl">
-			<button
-				type="button"
-				onClick={onToggle}
-				className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left transition hover:bg-[var(--surface)]"
-			>
+		<AccordionItem
+			value={session.id}
+			className="island-shell mb-4 rounded-2xl border-b-0"
+		>
+			<AccordionTrigger className="flex w-full items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left transition hover:no-underline hover:bg-[var(--surface)]">
 				<div className="min-w-0 flex-1">
 					<div className="mb-1 flex flex-wrap items-center gap-2">
 						<h3 className="text-sm font-semibold text-[var(--sea-ink)]">
@@ -392,74 +388,67 @@ function SessionCard({
 							{attentionItems.length}
 						</span>
 					</div>
-					<ChevronDown
-						className={`h-4 w-4 text-[var(--sea-ink-soft)] transition-transform duration-200 ${
-							expanded ? "rotate-0" : "-rotate-90"
-						}`}
+				</div>
+			</AccordionTrigger>
+
+			<AccordionContent className="border-t border-[var(--line)] px-5 pb-5 pt-4">
+				{/* Evidence counts for mobile */}
+				<div className="mb-4 flex flex-wrap gap-3 sm:hidden">
+					<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
+						<MessageSquareText className="h-3.5 w-3.5" />
+						{transcriptChunks.length} transcript chunks
+					</span>
+					<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
+						<Link2 className="h-3.5 w-3.5" />
+						{contextEvents.length} context events
+					</span>
+					<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
+						<CircleAlert className="h-3.5 w-3.5" />
+						{attentionItems.length} attention items
+					</span>
+				</div>
+
+				{/* Evidence summary bar */}
+				<div className="mb-4 hidden flex-wrap gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 sm:flex">
+					<EvidenceStat
+						icon={
+							<MessageSquareText className="h-3.5 w-3.5 text-[var(--lagoon)]" />
+						}
+						label="Transcript chunks"
+						count={transcriptChunks.length}
+					/>
+					<EvidenceStat
+						icon={<Link2 className="h-3.5 w-3.5 text-[var(--lagoon)]" />}
+						label="Context events"
+						count={contextEvents.length}
+					/>
+					<EvidenceStat
+						icon={<CircleAlert className="h-3.5 w-3.5 text-amber-500" />}
+						label="Attention items"
+						count={attentionItems.length}
 					/>
 				</div>
-			</button>
 
-			{expanded && (
-				<div className="border-t border-[var(--line)] px-5 pb-5 pt-4">
-					{/* Evidence counts for mobile */}
-					<div className="mb-4 flex flex-wrap gap-3 sm:hidden">
-						<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
-							<MessageSquareText className="h-3.5 w-3.5" />
-							{transcriptChunks.length} transcript chunks
-						</span>
-						<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
-							<Link2 className="h-3.5 w-3.5" />
-							{contextEvents.length} context events
-						</span>
-						<span className="inline-flex items-center gap-1.5 text-xs text-[var(--sea-ink-soft)]">
-							<CircleAlert className="h-3.5 w-3.5" />
-							{attentionItems.length} attention items
-						</span>
+				{/* Woven timeline */}
+				{timeline.length === 0 ? (
+					<div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-10 text-center text-sm text-[var(--sea-ink-soft)]">
+						No evidence captured for this session yet.
 					</div>
-
-					{/* Evidence summary bar */}
-					<div className="mb-4 hidden flex-wrap gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 sm:flex">
-						<EvidenceStat
-							icon={
-								<MessageSquareText className="h-3.5 w-3.5 text-[var(--lagoon)]" />
-							}
-							label="Transcript chunks"
-							count={transcriptChunks.length}
-						/>
-						<EvidenceStat
-							icon={<Link2 className="h-3.5 w-3.5 text-[var(--lagoon)]" />}
-							label="Context events"
-							count={contextEvents.length}
-						/>
-						<EvidenceStat
-							icon={<CircleAlert className="h-3.5 w-3.5 text-amber-500" />}
-							label="Attention items"
-							count={attentionItems.length}
-						/>
+				) : (
+					<div className="space-y-3">
+						<p className="text-xs font-medium uppercase tracking-wider text-[var(--sea-ink-soft)]">
+							Woven timeline ({timeline.length} item
+							{timeline.length !== 1 && "s"})
+						</p>
+						<div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+							{timeline.map((item) => (
+								<TimelineRow key={item.id} item={item} />
+							))}
+						</div>
 					</div>
-
-					{/* Woven timeline */}
-					{timeline.length === 0 ? (
-						<div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-10 text-center text-sm text-[var(--sea-ink-soft)]">
-							No evidence captured for this session yet.
-						</div>
-					) : (
-						<div className="space-y-3">
-							<p className="text-xs font-medium uppercase tracking-wider text-[var(--sea-ink-soft)]">
-								Woven timeline ({timeline.length} item
-								{timeline.length !== 1 && "s"})
-							</p>
-							<div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
-								{timeline.map((item) => (
-									<TimelineRow key={item.id} item={item} />
-								))}
-							</div>
-						</div>
-					)}
-				</div>
-			)}
-		</div>
+				)}
+			</AccordionContent>
+		</AccordionItem>
 	);
 }
 
@@ -545,9 +534,9 @@ function TimelineRow({ item }: { item: WovenEvidenceItem }) {
 				{item.attentionItems.length > 0 && (
 					<div className="space-y-2">
 						{item.attentionItems.map((attentionItem) => (
-							<div
+							<Alert
 								key={attentionItem.id}
-								className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+								className="rounded-lg border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
 							>
 								<div className="mb-1 flex flex-wrap gap-2">
 									<Badge variant="outline">
@@ -557,7 +546,7 @@ function TimelineRow({ item }: { item: WovenEvidenceItem }) {
 									<Badge variant="outline">{attentionItem.state}</Badge>
 								</div>
 								<p>{attentionItem.summary}</p>
-							</div>
+							</Alert>
 						))}
 					</div>
 				)}

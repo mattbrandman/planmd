@@ -1,4 +1,5 @@
 import { MessageSquare } from "lucide-react";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export interface LineRange {
@@ -18,6 +19,8 @@ interface LineNumberedContentProps {
 	commentedLines: LineComment[];
 	highlightedLines: LineRange | null;
 	onVisibleRangeChange?: (range: LineRange) => void;
+	/** Rendered inside the first selected line row to anchor the Popover */
+	popoverAnchor?: ReactNode;
 }
 
 /**
@@ -30,6 +33,7 @@ export default function LineNumberedContent({
 	commentedLines,
 	highlightedLines,
 	onVisibleRangeChange,
+	popoverAnchor,
 }: LineNumberedContentProps) {
 	const lines = useMemo(() => content.split("\n"), [content]);
 
@@ -211,14 +215,20 @@ export default function LineNumberedContent({
 					bgClass = "line-commented";
 				}
 
+				const isAnchorLine =
+					selectedLines != null && lineNum === selectedLines.start;
+
 				return (
 					// biome-ignore lint/a11y/useKeyboardHandler: line gutter button handles keyboard
 					<div
 						key={lineNum}
 						data-line={lineNum}
-						className={`line-row group cursor-pointer ${bgClass}`}
+						className={`line-row group relative cursor-pointer ${bgClass}`}
 						onClick={(e) => handleLineClick(lineNum, e.shiftKey)}
 					>
+						{/* Popover anchor placed on the first selected line */}
+						{isAnchorLine && popoverAnchor}
+
 						{/* Gutter */}
 						<button
 							type="button"
@@ -242,20 +252,18 @@ export default function LineNumberedContent({
 							<pre className="line-source">{line || " "}</pre>
 						</div>
 
-						{/* Add comment button on hover (only for non-selected lines without existing selection) */}
-						{!isSelected && commentCount === 0 && (
-							<button
-								type="button"
-								className="line-add-comment"
-								onClick={(e) => {
-									e.stopPropagation();
-									handleLineClick(lineNum, e.shiftKey);
-								}}
-								aria-label={`Comment on line ${lineNum}`}
-							>
-								<MessageSquare className="h-3.5 w-3.5" />
-							</button>
-						)}
+						{/* Add comment button on hover — always rendered for stable layout */}
+						<button
+							type="button"
+							className={`line-add-comment ${isSelected || commentCount > 0 ? "invisible pointer-events-none" : ""}`}
+							onClick={(e) => {
+								e.stopPropagation();
+								handleLineClick(lineNum, e.shiftKey);
+							}}
+							aria-label={`Comment on line ${lineNum}`}
+						>
+							<MessageSquare className="h-3.5 w-3.5" />
+						</button>
 					</div>
 				);
 			})}

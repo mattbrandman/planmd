@@ -4,8 +4,13 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createRevision, updatePlan } from "#/common/api/plans";
+import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
 import { Textarea } from "#/common/components/ui/textarea";
+import {
+	ToggleGroup,
+	ToggleGroupItem,
+} from "#/common/components/ui/toggle-group";
 
 interface RevisionEditorProps {
 	planId: string;
@@ -156,32 +161,29 @@ export default function RevisionEditor({
 					>
 						Plan Content
 					</label>
-					<div className="flex gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5">
-						<button
-							type="button"
-							onClick={() => setPreview(false)}
-							className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-								!preview
-									? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-									: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-							}`}
+					<ToggleGroup
+						type="single"
+						value={preview ? "preview" : "write"}
+						onValueChange={(v) => {
+							if (v) setPreview(v === "preview");
+						}}
+						className="rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5"
+					>
+						<ToggleGroupItem
+							value="write"
+							className="rounded-full px-3 py-1 text-xs data-[state=on]:bg-[var(--surface-strong)] data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm"
 						>
-							<Pencil className="h-3 w-3" />
+							<Pencil className="mr-1.5 h-3 w-3" />
 							Write
-						</button>
-						<button
-							type="button"
-							onClick={() => setPreview(true)}
-							className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-								preview
-									? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-									: "text-[var(--sea-ink-soft)] hover:bg-[var(--surface)] hover:text-[var(--sea-ink)]"
-							}`}
+						</ToggleGroupItem>
+						<ToggleGroupItem
+							value="preview"
+							className="rounded-full px-3 py-1 text-xs data-[state=on]:bg-[var(--surface-strong)] data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm"
 						>
-							<Eye className="h-3 w-3" />
+							<Eye className="mr-1.5 h-3 w-3" />
 							Preview
-						</button>
-					</div>
+						</ToggleGroupItem>
+					</ToggleGroup>
 				</div>
 
 				{preview ? (
@@ -209,11 +211,11 @@ export default function RevisionEditor({
 
 			{/* Carry-forward notice */}
 			{hasContentChanged && unresolvedCommentCount > 0 && (
-				<div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-400">
+				<Alert className="rounded-xl border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-400">
 					{unresolvedCommentCount} unresolved comment
 					{unresolvedCommentCount !== 1 && "s"} will carry forward to the new
 					revision.
-				</div>
+				</Alert>
 			)}
 
 			{/* Revision summary (only shown when content has changed) */}
@@ -242,9 +244,9 @@ export default function RevisionEditor({
 
 			{/* Error display */}
 			{error && (
-				<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+				<Alert variant="destructive" className="rounded-xl border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
 					{error}
-				</div>
+				</Alert>
 			)}
 
 			{/* Action buttons */}

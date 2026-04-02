@@ -4,8 +4,13 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createPlan } from "#/common/api/plans";
+import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
 import { Textarea } from "#/common/components/ui/textarea";
+import {
+	ToggleGroup,
+	ToggleGroupItem,
+} from "#/common/components/ui/toggle-group";
 
 export default function NewPlanPage() {
 	const navigate = useNavigate();
@@ -140,32 +145,29 @@ export default function NewPlanPage() {
 						>
 							Plan Content
 						</label>
-						<div className="flex gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5">
-							<button
-								type="button"
-								onClick={() => setPreview(false)}
-								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-									!preview
-										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-										: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
-								}`}
+						<ToggleGroup
+							type="single"
+							value={preview ? "preview" : "write"}
+							onValueChange={(v) => {
+								if (v) setPreview(v === "preview");
+							}}
+							className="rounded-full border border-[var(--line)] bg-[var(--surface)] p-0.5"
+						>
+							<ToggleGroupItem
+								value="write"
+								className="rounded-full px-3 py-1 text-xs data-[state=on]:bg-[var(--surface-strong)] data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm"
 							>
-								<Pencil className="h-3 w-3" />
+								<Pencil className="mr-1.5 h-3 w-3" />
 								Write
-							</button>
-							<button
-								type="button"
-								onClick={() => setPreview(true)}
-								className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-									preview
-										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
-										: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
-								}`}
+							</ToggleGroupItem>
+							<ToggleGroupItem
+								value="preview"
+								className="rounded-full px-3 py-1 text-xs data-[state=on]:bg-[var(--surface-strong)] data-[state=on]:text-[var(--sea-ink)] data-[state=on]:shadow-sm"
 							>
-								<Eye className="h-3 w-3" />
+								<Eye className="mr-1.5 h-3 w-3" />
 								Preview
-							</button>
-						</div>
+							</ToggleGroupItem>
+						</ToggleGroup>
 					</div>
 
 					{preview ? (
@@ -195,9 +197,12 @@ export default function NewPlanPage() {
 
 				{/* Error display */}
 				{error && (
-					<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+					<Alert
+						variant="destructive"
+						className="rounded-xl border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+					>
 						{error}
-					</div>
+					</Alert>
 				)}
 
 				{/* Submit */}

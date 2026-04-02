@@ -627,9 +627,8 @@ a {
   margin: 0;
   min-height: 1.5rem;
   display: block;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.85rem;
   line-height: 1.5;
@@ -678,6 +677,29 @@ a {
 
 .dark .line-badge {
   background: rgba(94, 205, 197, 0.1);
+}
+
+/* ── Floating comment composer (Popover override) ──────────────────────────── */
+
+.floating-composer {
+  border-color: var(--line);
+  background: var(--surface-strong);
+  box-shadow:
+    0 1px 0 var(--inset-glint) inset,
+    0 16px 48px rgba(30, 90, 72, 0.18),
+    0 6px 16px rgba(23, 58, 64, 0.12);
+}
+
+:is(.light) .floating-composer {
+  background: linear-gradient(165deg, var(--surface-strong) 60%, var(--surface));
+  backdrop-filter: blur(8px);
+}
+
+.dark .floating-composer {
+  box-shadow:
+    0 1px 0 var(--inset-glint) inset,
+    0 16px 48px rgba(0, 0, 0, 0.4),
+    0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 @layer base {
