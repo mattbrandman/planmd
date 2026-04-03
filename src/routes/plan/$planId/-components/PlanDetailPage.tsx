@@ -41,6 +41,7 @@ import { Alert } from "#/common/components/ui/alert";
 import { Button } from "#/common/components/ui/button";
 import { Textarea } from "#/common/components/ui/textarea";
 
+import { findSectionForLine, parseSections } from "#/common/lib/markdown";
 import CommentThread from "./CommentThread";
 import ConsensusBar from "./ConsensusBar";
 import FloatingComposer from "./FloatingComposer";
@@ -869,6 +870,7 @@ export default function PlanDetailPage({
 	function handleCommentLineClick(comment: {
 		startLine: number | null;
 		endLine: number | null;
+		sectionId: string | null;
 	}) {
 		if (comment.startLine == null) return;
 		const range = {
@@ -887,8 +889,19 @@ export default function PlanDetailPage({
 			selectedText: text,
 			dedupeKey: `comment-highlight:${range.start}-${range.end}`,
 		});
-		if (viewMode !== "source") {
-			setViewMode("source");
+		if (viewMode === "source") {
+			// LineNumberedContent auto-scrolls to highlightedLines
+		} else {
+			// In rendered mode, find the section containing this line and scroll to it
+			const sectionId =
+				comment.sectionId ??
+				findSectionForLine(parseSections(content), range.start)?.id;
+			if (sectionId) {
+				const el = document.getElementById(sectionId);
+				if (el) {
+					el.scrollIntoView({ behavior: "smooth", block: "center" });
+				}
+			}
 		}
 	}
 
